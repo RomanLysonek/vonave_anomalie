@@ -1,0 +1,297 @@
+{
+  "ae_split_summary": [
+    {
+      "autoencoder_split": "calibration",
+      "n": 362,
+      "flagged": 32,
+      "flag_rate": 0.08839779005524862,
+      "mean_score": 0.7252112158563535,
+      "max_score": 1.340095
+    },
+    {
+      "autoencoder_split": "holdout",
+      "n": 272,
+      "flagged": 32,
+      "flag_rate": 0.11764705882352941,
+      "mean_score": 0.7752705332720589,
+      "max_score": 1.551257
+    },
+    {
+      "autoencoder_split": "train",
+      "n": 1176,
+      "flagged": 0,
+      "flag_rate": 0.0,
+      "mean_score": 0.2952215324659864,
+      "max_score": 0.5926468
+    }
+  ],
+  "ae_flagged_windows": 64,
+  "ae_flagged_known_event_end_day_rate": 1.0,
+  "ae_flagged_with_event_in_last28_rate": 1.0,
+  "ae_overlap_stat_systemic_end_day": 5,
+  "ae_overlap_stat_systemic_end_day_rate": 0.078125,
+  "flag_clusters": [
+    {
+      "start": "2024-04-20",
+      "end": "2024-04-27",
+      "days": 8,
+      "max_score": 1.340095,
+      "mean_event_days_last28": 28.0,
+      "max_total_quantity": 1758.0
+    },
+    {
+      "start": "2025-02-08",
+      "end": "2025-03-03",
+      "days": 24,
+      "max_score": 1.3269097,
+      "mean_event_days_last28": 28.0,
+      "max_total_quantity": 2322.0
+    },
+    {
+      "start": "2025-12-08",
+      "end": "2025-12-09",
+      "days": 2,
+      "max_score": 1.0882307,
+      "mean_event_days_last28": 28.0,
+      "max_total_quantity": 2286.0
+    },
+    {
+      "start": "2025-12-12",
+      "end": "2025-12-12",
+      "days": 1,
+      "max_score": 1.0811149,
+      "mean_event_days_last28": 28.0,
+      "max_total_quantity": 1970.0
+    },
+    {
+      "start": "2025-12-14",
+      "end": "2026-01-11",
+      "days": 29,
+      "max_score": 1.551257,
+      "mean_event_days_last28": 28.0,
+      "max_total_quantity": 2832.0
+    }
+  ],
+  "top_20": [
+    {
+      "DateKey": "2025-12-26",
+      "systemic_autoencoder_score": 1.551257,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 424.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 2
+    },
+    {
+      "DateKey": "2025-12-27",
+      "systemic_autoencoder_score": 1.5360451,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 506.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2025-12-25",
+      "systemic_autoencoder_score": 1.4676691,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 355.0,
+      "available_products": 30,
+      "stat_systemic_flag": true,
+      "local_anomaly_products": 2
+    },
+    {
+      "DateKey": "2026-01-01",
+      "systemic_autoencoder_score": 1.4012495,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 328.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 2
+    },
+    {
+      "DateKey": "2025-12-24",
+      "systemic_autoencoder_score": 1.3693104,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 207.0,
+      "available_products": 30,
+      "stat_systemic_flag": true,
+      "local_anomaly_products": 10
+    },
+    {
+      "DateKey": "2025-12-30",
+      "systemic_autoencoder_score": 1.3549781,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 478.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 2
+    },
+    {
+      "DateKey": "2026-01-02",
+      "systemic_autoencoder_score": 1.34625,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 536.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2025-12-31",
+      "systemic_autoencoder_score": 1.3411143,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 285.0,
+      "available_products": 30,
+      "stat_systemic_flag": true,
+      "local_anomaly_products": 3
+    },
+    {
+      "DateKey": "2024-04-23",
+      "systemic_autoencoder_score": 1.340095,
+      "autoencoder_split": "calibration",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 1519.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2024-04-22",
+      "systemic_autoencoder_score": 1.3351903,
+      "autoencoder_split": "calibration",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 1602.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 1
+    },
+    {
+      "DateKey": "2025-12-29",
+      "systemic_autoencoder_score": 1.3283236,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 615.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2025-02-22",
+      "systemic_autoencoder_score": 1.3269097,
+      "autoencoder_split": "calibration",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 681.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2026-01-07",
+      "systemic_autoencoder_score": 1.3158432,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 665.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2025-02-21",
+      "systemic_autoencoder_score": 1.3131002,
+      "autoencoder_split": "calibration",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 598.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2025-12-28",
+      "systemic_autoencoder_score": 1.300185,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 610.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 1
+    },
+    {
+      "DateKey": "2025-02-20",
+      "systemic_autoencoder_score": 1.2986709,
+      "autoencoder_split": "calibration",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 807.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2024-04-21",
+      "systemic_autoencoder_score": 1.2868311,
+      "autoencoder_split": "calibration",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 1758.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2025-02-19",
+      "systemic_autoencoder_score": 1.281476,
+      "autoencoder_split": "calibration",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 864.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2026-01-06",
+      "systemic_autoencoder_score": 1.2726638,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 675.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    },
+    {
+      "DateKey": "2026-01-08",
+      "systemic_autoencoder_score": 1.2681758,
+      "autoencoder_split": "holdout",
+      "known_event_day": true,
+      "known_event_day_last28": 28.0,
+      "total_quantity": 684.0,
+      "available_products": 30,
+      "stat_systemic_flag": false,
+      "local_anomaly_products": 0
+    }
+  ]
+}

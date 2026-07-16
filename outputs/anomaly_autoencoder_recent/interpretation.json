@@ -1,0 +1,32 @@
+{
+  "score_date_correlation": 0.550997408846542,
+  "split_summary": [
+    {
+      "split": "calibration",
+      "n": 181,
+      "flagged": 1,
+      "flag_rate": 0.0055248618784530384,
+      "mean_score": 0.6483653367403315,
+      "max_score": 1.2007836
+    },
+    {
+      "split": "holdout",
+      "n": 181,
+      "flagged": 0,
+      "flag_rate": 0.0,
+      "mean_score": 0.5719859723204419,
+      "max_score": 0.94921714
+    },
+    {
+      "split": "train",
+      "n": 1448,
+      "flagged": 0,
+      "flag_rate": 0.0,
+      "mean_score": 0.3122346220165746,
+      "max_score": 0.5380996
+    }
+  ],
+  "flagged_dates": [
+    "2025-02-20"
+  ]
+}

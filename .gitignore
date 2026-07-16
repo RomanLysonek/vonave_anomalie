@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.idea/
+.DS_Store
+outputs/checkpoints/
+outputs/anomaly_screening/checkpoints/
+outputs/anomaly_autoencoder/
+*.log
+# Fold checkpoints are runtime caches and become stale when model semantics change.
+outputs/**/checkpoints/
+outputs/*checkpoints*/
+# Long-running anomaly-search artifacts are reproducible runtime outputs.
+outputs/overnight_anomaly_search/
+outputs/weekend_anomaly_search/
+outputs/exhaustive_anomaly_search/
+outputs/anomaly_cache/
+
+# Weekend-v2 generated artifacts
+outputs/weekend_v2_search/
+outputs/weekend_v2_smoke/
+outputs/exhaustive_weekend_v2/

@@ -1,0 +1,41 @@
+{
+  "local_evt": {
+    "threshold": 4.277336873144182,
+    "method": "evt_pot_gpd",
+    "alpha": 0.01,
+    "tail_quantile": 0.8867,
+    "u": 1.7948006822200184,
+    "xi": 0.3176644672942318,
+    "beta": 0.678502109975119,
+    "n_total": 39676,
+    "n_exceed": 4496,
+    "validation_far": 0.004940014114326041,
+    "validation_far_error": 0.005059985885673959,
+    "ks_stat": 0.013944340916766329
+  },
+  "systemic_evt": {
+    "threshold": 3.377906052928941,
+    "method": "evt_pot_gpd",
+    "alpha": 0.02,
+    "tail_quantile": 0.8,
+    "u": 2.050582893068668,
+    "xi": 0.22120038807085912,
+    "beta": 0.4422247829770392,
+    "n_total": 1446,
+    "n_exceed": 289,
+    "validation_far": 0.013850415512465374,
+    "validation_far_error": 0.006149584487534627,
+    "ks_stat": 0.0403041107696584
+  },
+  "n_rows": 51563,
+  "n_scored": 49595,
+  "n_local_anomalies": 485,
+  "n_systemic_days": 35,
+  "mean_raw_weight": 0.9974860074786563,
+  "test_context": {
+    "n_rows": 210,
+    "n_shift_flags": 0,
+    "max_percentile": 0.9881698116866745,
+    "mean_percentile": 0.4308831637303604
+  }
+}

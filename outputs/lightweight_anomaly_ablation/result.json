@@ -1,0 +1,83 @@
+{
+  "test": "availability-aware weighted_4321 baseline anomaly-lag ablation",
+  "development_origins": [
+    "2023-01-10",
+    "2024-06-20",
+    "2024-11-29",
+    "2025-02-10"
+  ],
+  "benchmark_origins": [
+    "2026-01-04",
+    "2025-12-28",
+    "2025-12-21",
+    "2025-12-14"
+  ],
+  "summary": [
+    {
+      "split": "development",
+      "policy": "control",
+      "WAPE": 0.45677417441463886,
+      "MAE": 21.04925515921826,
+      "BiasRatio": 0.08323220190696501,
+      "n": 813
+    },
+    {
+      "split": "development",
+      "policy": "weight_soft",
+      "WAPE": 0.4571935297578083,
+      "MAE": 21.06858006442348,
+      "BiasRatio": 0.08587196146307978,
+      "n": 813
+    },
+    {
+      "split": "development",
+      "policy": "weight_default",
+      "WAPE": 0.4579978584200487,
+      "MAE": 21.105645468274446,
+      "BiasRatio": 0.08808486221900964,
+      "n": 813
+    },
+    {
+      "split": "benchmark",
+      "policy": "control",
+      "WAPE": 1.1159143735994546,
+      "MAE": 31.815515873015876,
+      "BiasRatio": 0.8550071680097986,
+      "n": 840
+    },
+    {
+      "split": "benchmark",
+      "policy": "weight_soft",
+      "WAPE": 1.117832649543875,
+      "MAE": 31.87020729038841,
+      "BiasRatio": 0.8572677822651176,
+      "n": 840
+    },
+    {
+      "split": "benchmark",
+      "policy": "weight_default",
+      "WAPE": 1.1197058764149859,
+      "MAE": 31.92361432650297,
+      "BiasRatio": 0.8594640373342998,
+      "n": 840
+    }
+  ],
+  "comparisons": [
+    {
+      "policy": "weight_soft",
+      "development_relative_improvement": -0.0009180802388989175,
+      "benchmark_relative_change": 0.0017190171484510832,
+      "passes_development_gate": false,
+      "passes_benchmark_guard": true
+    },
+    {
+      "policy": "weight_default",
+      "development_relative_improvement": -0.0026789693331020882,
+      "benchmark_relative_change": 0.00339766464634878,
+      "passes_development_gate": false,
+      "passes_benchmark_guard": true
+    }
+  ],
+  "winner": "control",
+  "interpretation": "First-stage falsification only; full direct NeuralNet confirmation is required before promotion."
+}

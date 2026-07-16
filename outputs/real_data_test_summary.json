@@ -1,0 +1,418 @@
+{
+  "decision": "Do not promote anomaly weighting or the current autoencoder into the final forecasting model.",
+  "data": {
+    "original_train_rows": 51534,
+    "calendar_reindexed_rows": 51563,
+    "products": 30,
+    "date_min": "2021-01-01",
+    "date_max": "2026-01-11",
+    "test_rows": 210,
+    "test_date_min": "2026-01-12",
+    "test_date_max": "2026-01-18"
+  },
+  "statistical_detector": {
+    "local_evt": {
+      "threshold": 4.277336873144182,
+      "method": "evt_pot_gpd",
+      "alpha": 0.01,
+      "tail_quantile": 0.8867,
+      "u": 1.7948006822200184,
+      "xi": 0.3176644672942318,
+      "beta": 0.678502109975119,
+      "n_total": 39676,
+      "n_exceed": 4496,
+      "validation_far": 0.004940014114326041,
+      "validation_far_error": 0.005059985885673959,
+      "ks_stat": 0.013944340916766329
+    },
+    "systemic_evt": {
+      "threshold": 3.377906052928941,
+      "method": "evt_pot_gpd",
+      "alpha": 0.02,
+      "tail_quantile": 0.8,
+      "u": 2.050582893068668,
+      "xi": 0.22120038807085912,
+      "beta": 0.4422247829770392,
+      "n_total": 1446,
+      "n_exceed": 289,
+      "validation_far": 0.013850415512465374,
+      "validation_far_error": 0.006149584487534627,
+      "ks_stat": 0.0403041107696584
+    },
+    "n_rows": 51563,
+    "n_scored": 49595,
+    "n_local_anomalies": 485,
+    "n_systemic_days": 35,
+    "mean_raw_weight": 0.9974860074786563,
+    "test_context": {
+      "n_rows": 210,
+      "n_shift_flags": 0,
+      "max_percentile": 0.9881698116866745,
+      "mean_percentile": 0.4308831637303604
+    }
+  },
+  "statistical_detector_details": {
+    "local_anomaly_rate": 0.009405969396660396,
+    "local_anomalies_on_known_event": 191,
+    "local_anomalies_on_known_event_rate": 0.3938144329896907,
+    "local_anomalies_overlapping_systemic": 129,
+    "mean_weight_among_flagged": 0.732723718808153,
+    "mean_weight_all_rows": 0.9974860074786563
+  },
+  "forecast_weight_ablation": {
+    "test": "availability-aware weighted_4321 baseline anomaly-lag ablation",
+    "development_origins": [
+      "2023-01-10",
+      "2024-06-20",
+      "2024-11-29",
+      "2025-02-10"
+    ],
+    "benchmark_origins": [
+      "2026-01-04",
+      "2025-12-28",
+      "2025-12-21",
+      "2025-12-14"
+    ],
+    "summary": [
+      {
+        "split": "development",
+        "policy": "control",
+        "WAPE": 0.45677417441463886,
+        "MAE": 21.04925515921826,
+        "BiasRatio": 0.08323220190696501,
+        "n": 813
+      },
+      {
+        "split": "development",
+        "policy": "weight_soft",
+        "WAPE": 0.4571935297578083,
+        "MAE": 21.06858006442348,
+        "BiasRatio": 0.08587196146307978,
+        "n": 813
+      },
+      {
+        "split": "development",
+        "policy": "weight_default",
+        "WAPE": 0.4579978584200487,
+        "MAE": 21.105645468274446,
+        "BiasRatio": 0.08808486221900964,
+        "n": 813
+      },
+      {
+        "split": "benchmark",
+        "policy": "control",
+        "WAPE": 1.1159143735994546,
+        "MAE": 31.815515873015876,
+        "BiasRatio": 0.8550071680097986,
+        "n": 840
+      },
+      {
+        "split": "benchmark",
+        "policy": "weight_soft",
+        "WAPE": 1.117832649543875,
+        "MAE": 31.87020729038841,
+        "BiasRatio": 0.8572677822651176,
+        "n": 840
+      },
+      {
+        "split": "benchmark",
+        "policy": "weight_default",
+        "WAPE": 1.1197058764149859,
+        "MAE": 31.92361432650297,
+        "BiasRatio": 0.8594640373342998,
+        "n": 840
+      }
+    ],
+    "comparisons": [
+      {
+        "policy": "weight_soft",
+        "development_relative_improvement": -0.0009180802388989175,
+        "benchmark_relative_change": 0.0017190171484510832,
+        "passes_development_gate": false,
+        "passes_benchmark_guard": true
+      },
+      {
+        "policy": "weight_default",
+        "development_relative_improvement": -0.0026789693331020882,
+        "benchmark_relative_change": 0.00339766464634878,
+        "passes_development_gate": false,
+        "passes_benchmark_guard": true
+      }
+    ],
+    "winner": "control",
+    "interpretation": "First-stage falsification only; full direct NeuralNet confirmation is required before promotion."
+  },
+  "autoencoder_original_split": {
+    "config": {
+      "window": 28,
+      "hidden_dim": 128,
+      "latent_dim": 16,
+      "epochs": 40,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "weight_decay": 1e-05,
+      "noise_std": 0.02,
+      "train_fraction": 0.65,
+      "calibration_fraction": 0.2,
+      "evt_alpha": 0.02,
+      "seed": 42
+    },
+    "device": "cpu",
+    "n_products": 30,
+    "products": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30
+    ],
+    "n_windows": 1810,
+    "train_windows": 1176,
+    "calibration_windows": 362,
+    "holdout_windows": 272,
+    "final_train_loss": 0.30005409999897603,
+    "evt": {
+      "threshold": 1.0796724393082908,
+      "method": "evt_pot_gpd",
+      "alpha": 0.02,
+      "tail_quantile": 0.8,
+      "u": 0.7947775959968567,
+      "xi": 0.17612554603571054,
+      "beta": 0.10033075579897768,
+      "n_total": 290,
+      "n_exceed": 58,
+      "validation_far": 0.3333333333333333,
+      "validation_far_error": 0.3133333333333333,
+      "ks_stat": 0.12587846470339514
+    },
+    "n_flagged": 64
+  },
+  "autoencoder_recent_split": {
+    "config": {
+      "window": 28,
+      "hidden_dim": 128,
+      "latent_dim": 16,
+      "epochs": 30,
+      "batch_size": 64,
+      "learning_rate": 0.001,
+      "weight_decay": 1e-05,
+      "noise_std": 0.02,
+      "train_fraction": 0.8,
+      "calibration_fraction": 0.1,
+      "evt_alpha": 0.02,
+      "seed": 42
+    },
+    "device": "cpu",
+    "n_products": 30,
+    "products": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30
+    ],
+    "n_windows": 1810,
+    "train_windows": 1448,
+    "calibration_windows": 181,
+    "holdout_windows": 181,
+    "final_train_loss": 0.31800021555112756,
+    "evt": {
+      "threshold": 1.1567253958344772,
+      "method": "evt_pot_gpd",
+      "alpha": 0.02,
+      "tail_quantile": 0.8,
+      "u": 0.9236035823822022,
+      "xi": -0.7638961259989894,
+      "beta": 0.21513274192346427,
+      "n_total": 145,
+      "n_exceed": 29,
+      "validation_far": 0.0,
+      "validation_far_error": 0.02,
+      "ks_stat": 0.1120138283418983
+    },
+    "n_flagged": 1
+  },
+  "autoencoder_diagnostics": {
+    "original_split": {
+      "score_date_correlation": 0.7582052456894575,
+      "split_summary": [
+        {
+          "split": "calibration",
+          "n": 362,
+          "flagged": 32,
+          "flag_rate": 0.08839779005524862,
+          "mean_score": 0.7252112158563537,
+          "max_score": 1.340095
+        },
+        {
+          "split": "holdout",
+          "n": 272,
+          "flagged": 32,
+          "flag_rate": 0.11764705882352941,
+          "mean_score": 0.7752705332720587,
+          "max_score": 1.551257
+        },
+        {
+          "split": "train",
+          "n": 1176,
+          "flagged": 0,
+          "flag_rate": 0.0,
+          "mean_score": 0.29522153246598637,
+          "max_score": 0.5926468
+        }
+      ],
+      "flagged_dates": [
+        "2024-04-20",
+        "2024-04-21",
+        "2024-04-22",
+        "2024-04-23",
+        "2024-04-24",
+        "2024-04-25",
+        "2024-04-26",
+        "2024-04-27",
+        "2025-02-08",
+        "2025-02-09",
+        "2025-02-10",
+        "2025-02-11",
+        "2025-02-12",
+        "2025-02-13",
+        "2025-02-14",
+        "2025-02-15",
+        "2025-02-16",
+        "2025-02-17",
+        "2025-02-18",
+        "2025-02-19",
+        "2025-02-20",
+        "2025-02-21",
+        "2025-02-22",
+        "2025-02-23",
+        "2025-02-24",
+        "2025-02-25",
+        "2025-02-26",
+        "2025-02-27",
+        "2025-02-28",
+        "2025-03-01",
+        "2025-03-02",
+        "2025-03-03",
+        "2025-12-08",
+        "2025-12-09",
+        "2025-12-12",
+        "2025-12-14",
+        "2025-12-15",
+        "2025-12-16",
+        "2025-12-17",
+        "2025-12-18",
+        "2025-12-19",
+        "2025-12-20",
+        "2025-12-21",
+        "2025-12-22",
+        "2025-12-23",
+        "2025-12-24",
+        "2025-12-25",
+        "2025-12-26",
+        "2025-12-27",
+        "2025-12-28",
+        "2025-12-29",
+        "2025-12-30",
+        "2025-12-31",
+        "2026-01-01",
+        "2026-01-02",
+        "2026-01-03",
+        "2026-01-04",
+        "2026-01-05",
+        "2026-01-06",
+        "2026-01-07",
+        "2026-01-08",
+        "2026-01-09",
+        "2026-01-10",
+        "2026-01-11"
+      ]
+    },
+    "recent_split": {
+      "score_date_correlation": 0.550997408846542,
+      "split_summary": [
+        {
+          "split": "calibration",
+          "n": 181,
+          "flagged": 1,
+          "flag_rate": 0.0055248618784530384,
+          "mean_score": 0.6483653367403315,
+          "max_score": 1.2007836
+        },
+        {
+          "split": "holdout",
+          "n": 181,
+          "flagged": 0,
+          "flag_rate": 0.0,
+          "mean_score": 0.5719859723204419,
+          "max_score": 0.94921714
+        },
+        {
+          "split": "train",
+          "n": 1448,
+          "flagged": 0,
+          "flag_rate": 0.0,
+          "mean_score": 0.3122346220165746,
+          "max_score": 0.5380996
+        }
+      ],
+      "flagged_dates": [
+        "2025-02-20"
+      ]
+    }
+  },
+  "not_completed": {
+    "full_direct_lightgbm_or_neuralnet_confirmation": "Not completed: exact direct-panel runs exceeded this sandbox's time/memory envelope.",
+    "anomaly_feature_ablation": "No result: the representative Ridge direct-panel feature test exceeded five minutes before completing a fold."
+  }
+}

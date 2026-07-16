@@ -1,0 +1,200 @@
+{
+  "cv_folds": [
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2022-02-01",
+      "nn_seconds": 36.4,
+      "tree_seconds": 6.89,
+      "fold_seconds": 44.05
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2022-06-15",
+      "nn_seconds": 46.44,
+      "tree_seconds": 7.58,
+      "fold_seconds": 55.02
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2022-11-20",
+      "nn_seconds": 59.61,
+      "tree_seconds": 8.26,
+      "fold_seconds": 69.1
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2023-01-10",
+      "nn_seconds": 63.5,
+      "tree_seconds": 8.49,
+      "fold_seconds": 73.32
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2023-07-01",
+      "nn_seconds": 85.4,
+      "tree_seconds": 9.52,
+      "fold_seconds": 96.65
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2023-11-24",
+      "nn_seconds": 101.12,
+      "tree_seconds": 10.41,
+      "fold_seconds": 113.51
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2023-12-18",
+      "nn_seconds": 102.72,
+      "tree_seconds": 10.56,
+      "fold_seconds": 115.35
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2024-02-14",
+      "nn_seconds": 119.35,
+      "tree_seconds": 18.04,
+      "fold_seconds": 139.68
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2024-06-20",
+      "nn_seconds": 125.38,
+      "tree_seconds": 11.56,
+      "fold_seconds": 139.38
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2024-11-29",
+      "nn_seconds": 150.38,
+      "tree_seconds": 12.53,
+      "fold_seconds": 165.8
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2024-12-20",
+      "nn_seconds": 145.36,
+      "tree_seconds": 12.5,
+      "fold_seconds": 160.79
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "development",
+      "origin": "2025-02-10",
+      "nn_seconds": 145.31,
+      "tree_seconds": 12.97,
+      "fold_seconds": 161.4
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "recent_benchmark",
+      "origin": "2026-01-04",
+      "nn_seconds": 185.93,
+      "tree_seconds": 14.94,
+      "fold_seconds": 204.72
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "recent_benchmark",
+      "origin": "2025-12-28",
+      "nn_seconds": 191.03,
+      "tree_seconds": 14.85,
+      "fold_seconds": 209.63
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "recent_benchmark",
+      "origin": "2025-12-21",
+      "nn_seconds": 193.92,
+      "tree_seconds": 15.14,
+      "fold_seconds": 212.83
+    },
+    {
+      "strategy": "direct",
+      "origin_type": "recent_benchmark",
+      "origin": "2025-12-14",
+      "nn_seconds": 189.49,
+      "tree_seconds": 14.89,
+      "fold_seconds": 208.24
+    }
+  ],
+  "nn_runtime": {
+    "batch_size": 512,
+    "batch_source": "CLI override",
+    "lr_scaling": "fixed",
+    "effective_learning_rate": 0.001,
+    "training_backend": "device_resident",
+    "benchmark_file": "outputs/nn_batch_benchmark.json"
+  },
+  "c1_runtime": {
+    "training_window_days": null,
+    "recency_half_life_days": null,
+    "baseline_variant": "weighted_4321",
+    "enable_trend_features": false,
+    "sources": {
+      "training_window_days": "CLI override",
+      "recency_half_life_days": "CLI override",
+      "baseline_variant": "CLI override",
+      "enable_trend_features": "CLI override"
+    },
+    "config_file": null
+  },
+  "c2_runtime": {
+    "c2_feature_groups": [
+      "price",
+      "campaign",
+      "lifecycle",
+      "market",
+      "event"
+    ],
+    "source": "CLI override",
+    "config_file": null
+  },
+  "c34_runtime": {
+    "nn_loss": "mse",
+    "nn_target_mode": "residual",
+    "nn_combined_mse_weight": 0.25,
+    "tree_target_mode": "log1p",
+    "xgboost_target_mode": "residual",
+    "lightgbm_target_mode": "log1p",
+    "enable_channel_history_features": false,
+    "channel_aux_weight": 0.0,
+    "channel_share_smoothing": 0.5,
+    "sources": {
+      "nn_loss": "outputs/c34_screening/recommendation.json",
+      "nn_target_mode": "outputs/c34_screening/recommendation.json",
+      "nn_combined_mse_weight": "outputs/c34_screening/recommendation.json",
+      "tree_target_mode": "outputs/c34_screening/recommendation.json",
+      "xgboost_target_mode": "outputs/c34_screening/recommendation.json",
+      "lightgbm_target_mode": "outputs/c34_screening/recommendation.json",
+      "enable_channel_history_features": "outputs/c34_screening/recommendation.json",
+      "channel_aux_weight": "outputs/c34_screening/recommendation.json",
+      "channel_share_smoothing": "outputs/c34_screening/recommendation.json"
+    },
+    "config_file": "outputs/c34_screening/recommendation.json"
+  },
+  "c5_runtime": {
+    "enabled": true,
+    "models": [
+      "NeuralNet",
+      "XGBoost",
+      "LightGBM"
+    ],
+    "grid_step": 0.01,
+    "min_relative_improvement": 0.002,
+    "benchmark_max_relative_regression": 0.02
+  },
+  "ensemble_fit_seconds": 0.029,
+  "total_seconds": 2579.27
+}

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notino Quantity Forecast — Model & Strategy Comparison</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css?v=18" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="bg-glow"></div>
+
+  <div class="promo-bar">
+    <a class="promo-dataset-link" data-dataset-link href="/dataset" title="The data structure and the modeling decisions it forced">30 Product Time Series</a>
+    <span id="promo-strategy">7-Day Forecast</span>
+    <span id="promo-model-count">Models Compared</span>
+    <a class="promo-evaluation-link" data-evaluation-link href="/evaluation" title="Rolling forecast origins; not the same thing as recursive inference">Walk-Forward Validated</a>
+  </div>
+
+  <header class="hero">
+    <div class="hero-top">
+      <div class="brand">
+        <span class="brand-logo">NOTINO</span>
+        <span class="brand-tagline">Interview Assignment</span>
+      </div>
+      <div class="hero-title-block">
+        <h1>Quantity Forecast Dashboard</h1>
+      </div>
+    </div>
+    <nav class="site-nav" id="site-nav"></nav>
+  </header>
+
+  <main id="app">
+    <section class="selection-strip">
+      <div>
+        <span class="selection-label">View</span>
+        <strong id="canonical-selection-text">Canonical submission</strong>
+      </div>
+      <div class="controls">
+        <div class="control-group">
+          <label for="strategy-select">Forecast strategy</label>
+          <select id="strategy-select"></select>
+        </div>
+        <div class="control-group">
+          <label for="regime-select">Availability treatment</label>
+          <select id="regime-select">
+            <option value="conditional">Available days only</option>
+            <option value="realized">All days / realized sales</option>
+          </select>
+        </div>
+      </div>
+      <p class="selection-explanation" id="regime-explanation"></p>
+    </section>
+
+    <section class="kpi-grid" id="kpi-grid">
+      <div class="kpi-card skeleton"></div>
+      <div class="kpi-card skeleton"></div>
+      <div class="kpi-card skeleton"></div>
+      <div class="kpi-card skeleton"></div>
+    </section>
+
+    <section class="panel model-comparison-panel">
+      <div class="panel-header row">
+        <div>
+          <h2>Model comparison</h2>
+          <p id="model-comparison-context">Recent-benchmark OOF · available product-days · common rows · global aggregation</p>
+        </div>
+      </div>
+      <div class="columns-grid" id="columns-grid"></div>
+    </section>
+
+    <section class="panel" id="ensemble-panel" hidden>
+      <div class="panel-header row">
+        <div>
+          <h2>Development-OOF ensemble</h2>
+          <p>Negative deltas favour the ensemble; Δ WAPE is absolute percentage points, while relative change is measured against the best single model</p>
+        </div>
+        <span class="winner-badge" id="ensemble-status">—</span>
+      </div>
+      <div class="panel-grid compact-grid">
+        <div class="table-wrap">
+          <table class="data-table" id="ensemble-weights-table">
+            <thead><tr><th>Member</th><th>Weight</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="ensemble-comparison-table">
+            <thead><tr><th>Measure</th><th>Ensemble</th><th>Best single</th><th>Δ WAPE (pp)</th><th>Relative change</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel-grid">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>MAE &amp; RMSE by model</h2>
+          <p>Selected strategy and evaluation regime — lower is better</p>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="chart-comparison"></canvas>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Walk-forward benchmark folds</h2>
+          <p>Every model is scored on the same common population</p>
+        </div>
+        <div class="table-wrap" id="cv-table-wrap">
+          <table class="data-table" id="cv-table">
+            <thead>
+              <tr><th>Fold</th><th>Model</th><th>MAE</th><th>RMSE</th><th>Bias</th><th>Bias%</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="strategy-comparison-panel" hidden>
+      <div class="panel-header row">
+        <div>
+          <h2>Direct vs. recursive — paired development OOF</h2>
+          <p>Same products, origins, dates and horizons for both strategies</p>
+        </div>
+        <div class="control-group">
+          <label for="pair-metric-select">Metric</label>
+          <select id="pair-metric-select">
+            <option value="WAPE">WAPE</option>
+            <option value="MAE">MAE</option>
+            <option value="RMSE">RMSE</option>
+            <option value="Bias">Bias</option>
+            <option value="BiasRatio">Bias ratio</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="strategy-comparison-table">
+          <thead>
+            <tr><th>Model</th><th>Direct</th><th>Recursive</th><th>Recursive − Direct</th><th>Winner</th><th>Paired rows</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header row">
+        <div>
+          <h2>Error by forecast horizon</h2>
+          <p>Development OOF · use this to inspect recursive error propagation</p>
+        </div>
+        <div class="controls">
+          <div class="control-group">
+            <label for="horizon-model-select">Model</label>
+            <select id="horizon-model-select"></select>
+          </div>
+          <div class="control-group">
+            <label for="horizon-metric-select">Metric</label>
+            <select id="horizon-metric-select">
+              <option value="WAPE">WAPE</option>
+              <option value="MAE">MAE</option>
+              <option value="RMSE">RMSE</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-horizon"></canvas>
+      </div>
+    </section>
+
+    <section class="panel-grid">
+      <div class="panel">
+        <div class="panel-header row">
+          <div>
+            <h2>Per-product error &amp; bias</h2>
+            <p>Conditional common population, sorted by WAPE</p>
+          </div>
+          <div class="controls">
+            <div class="control-group">
+              <label for="product-error-model-select">Model</label>
+              <select id="product-error-model-select"></select>
+            </div>
+            <div class="control-group">
+              <label for="product-error-split-select">Split</label>
+              <select id="product-error-split-select">
+                <option value="recent_benchmark">Recent benchmark</option>
+                <option value="development">Development</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap diagnostic-table-wrap">
+          <table class="data-table" id="per-product-table">
+            <thead><tr><th>Product</th><th>WAPE</th><th>MAE</th><th>Bias%</th><th>Actual</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Validation periods</h2>
+          <p>Development windows grouped by how closely they resemble the January test week or stress retail-event behavior</p>
+        </div>
+        <div class="definition-list" id="regime-definitions"></div>
+        <div class="table-wrap diagnostic-table-wrap">
+          <table class="data-table" id="regime-table">
+            <thead><tr><th>Period type</th><th>Model</th><th>WAPE</th><th>Bias%</th><th>n</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel-grid">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>High-volume product-days</h2>
+          <p>Retrospective stress test on rows whose actual demand is in the top 10% of the recent benchmark</p>
+        </div>
+        <div class="diagnostic-note compact" id="top-decile-explanation"></div>
+        <div class="table-wrap diagnostic-table-wrap">
+          <table class="data-table" id="top-decile-table">
+            <thead><tr><th>Model</th><th>WAPE</th><th>MAE</th><th>Bias%</th><th>Actual cutoff</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Largest recent errors</h2>
+          <p>Rows requiring business interpretation, not automatic clipping</p>
+        </div>
+        <div class="table-wrap diagnostic-table-wrap">
+          <table class="data-table" id="top-error-table">
+            <thead><tr><th>Date</th><th>Product</th><th>Model</th><th>Actual</th><th>Pred.</th><th>|Error|</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="diagnostic-note" id="top-error-insight" hidden></div>
+      </div>
+    </section>
+
+    <section class="panel" id="final-audit-panel" hidden>
+      <div class="panel-header row">
+        <div>
+          <h2>Frozen final audit</h2>
+          <p>Three untouched origins; the frozen conditional test-aligned objective is primary, with global WAPE shown for context</p>
+        </div>
+        <span class="winner-badge">One-shot</span>
+      </div>
+      <div class="table-wrap diagnostic-table-wrap">
+        <table class="data-table" id="final-audit-table">
+          <thead><tr><th>Model</th><th>Aligned WAPE</th><th>Global WAPE</th><th>MAE</th><th>Bias%</th><th>Coverage</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header row">
+        <div>
+          <h2>Product explorer — all models</h2>
+          <p>History vs. <span id="product-strategy-note">selected</span> forecasts; click a model label below to show or hide its forecast</p>
+        </div>
+        <div class="controls product-explorer-controls">
+          <div class="control-group">
+            <label for="product-select">Product</label>
+            <select id="product-select"></select>
+          </div>
+          <label class="checkbox-control" for="product-history-toggle">
+            <input id="product-history-toggle" type="checkbox" checked />
+            <span>Show history</span>
+          </label>
+        </div>
+      </div>
+      <div class="product-model-legend-row" aria-label="Product explorer model visibility controls">
+        <div class="product-model-legend" id="product-model-legend"></div>
+        <div class="product-model-actions">
+          <button class="legend-action" id="product-models-select-all" type="button">Select all</button>
+          <button class="legend-action" id="product-models-deselect-all" type="button">Deselect all</button>
+        </div>
+      </div>
+      <div class="chart-wrap tall">
+        <canvas id="chart-product"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Canonical submission grid</h2>
+        <p>The table below always remains the selected submission, independent of the dashboard view.</p>
+      </div>
+      <div class="table-wrap tall" id="submission-table-wrap"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p id="footer-method-text">Loading canonical forecasting method…</p>
+  </footer>
+
+  <script src="/static/common.js?v=13"></script>
+  <script src="/static/app.js?v=14"></script>
+</body>
+</html>
