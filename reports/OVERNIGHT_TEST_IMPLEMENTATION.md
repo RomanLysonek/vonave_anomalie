@@ -50,7 +50,7 @@ Autoencoder origin state is available only when the origin day's sales are alrea
 4. multi-seed, wider-origin confirmation;
 5. bootstrap uncertainty and explicit promotion gates;
 6. atomic outputs, candidate subprocess isolation, checkpoints and resume;
-7. a final winner JSON consumable by `ml/pipeline.py --anomaly-config`.
+7. an archived, unverified recommendation record with execution disabled.
 
 ### Mac launch and monitoring
 
@@ -66,7 +66,7 @@ The launcher verifies MPS, enables fallback for unsupported operations and preve
 - all modified Python modules compile;
 - search orchestration dry-runs through every stage;
 - candidate generation is deterministic;
-- winner JSON is loadable through the normal pipeline CLI;
+- archived recommendation JSON is rejected by the normal pipeline CLI;
 - chronological V2 autoencoder training passes a synthetic CPU test;
 - date-key feature and target-weight alignment tests pass;
 - autoencoder/statistical/hybrid feature schemas are source-aware;

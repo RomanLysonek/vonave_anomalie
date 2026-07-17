@@ -1,8 +1,8 @@
 {
   "anomaly_aggregate": {
     "path": "outputs/dashboard/anomaly-dashboard-v2.json",
-    "sha256": "3765404cc539f017aabd1cc70411d134367c72110a7a3a4b9228f6f6dd4f9027",
-    "size": 545123
+    "sha256": "42eddac0875eb37eb317a4de6c2d12f8d671e30c3ba462cdebd24c8568c5ba75",
+    "size": 545241
   },
   "anomaly_products": {
     "count": 30,
@@ -140,13 +140,13 @@
   "product_count": 30,
   "published_results_manifest": {
     "path": "outputs/published_results_manifest.json",
-    "sha256": "b859c770980d7827da0f86cb783e0a5958818f8c3c57ed592b2a33b6c80d117f",
+    "sha256": "e6cf09b33af89416507ef024ab64cd729907b49e6c1f91f5adf1a5c7ac401f79",
     "size": 14477
   },
   "schema_version": "dashboard-publication-v2",
   "site_manifest": {
     "path": "docs/site-manifest.json",
-    "sha256": "b57edd17e93cb27822a25fdbb37cd2e8e6104158282d2acc56cd3655deba4c8e",
+    "sha256": "ceab7bf0096e57ee5a118f2f68ad5e5ef058d4b76af77cf6792b0850c771c3fe",
     "size": 8015
   },
   "source_manifest_hash": "71a69b16bf097e8e4b816ebfd25c618afc3d5c4a879cc1e6d065d7d550c78311",

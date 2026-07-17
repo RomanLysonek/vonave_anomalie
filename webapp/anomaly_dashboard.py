@@ -25,7 +25,7 @@ from ml.artifact_provenance import (
 )
 
 
-SCHEMA_VERSION = "anomaly-dashboard-v2"
+SCHEMA_VERSION = "anomaly-dashboard-v3"
 PRODUCT_SCHEMA_VERSION = "anomaly-product-v2"
 AUDIT_FILES = (
     "anomaly_metadata.json",
@@ -736,10 +736,13 @@ def build_anomaly_dashboard(root_dir: Path) -> dict[str, Any]:
             "state": "contaminated",
             "scientific_status": "contaminated",
             "provenance": "unverified",
+            "recommendation_status": "archived",
+            "execution_enabled": False,
             "selection_use": "excluded",
             "message": (
                 "Historical overnight, diagnostic, and search artifacts may contain "
-                "benchmark-target contamination and are excluded from current evidence."
+                "benchmark-target contamination, are archived and unverified, and cannot "
+                "be used to invoke the forecasting pipeline."
             ),
         },
         "weekend_v2": {

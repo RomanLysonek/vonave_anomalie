@@ -683,9 +683,12 @@ def configure_anomaly_runtime(cfg: Config, options: RuntimeOptions) -> dict:
             payload = json.load(handle)
         if not isinstance(payload, dict):
             raise ValueError(f"Invalid anomaly candidate in {options.anomaly_config}")
-        if "winner" in payload and isinstance(payload["winner"], dict):
-            payload = payload["winner"]
-        candidate_config = payload.get("config", payload)
+        if payload.get("schema_version") != "manual-anomaly-config-v1":
+            raise ValueError(
+                "Only explicit manual-anomaly-config-v1 files can configure "
+                "pipeline anomaly execution; search/recommendation artifacts are disabled"
+            )
+        candidate_config = payload.get("config")
         if not isinstance(candidate_config, dict):
             raise ValueError(f"Invalid anomaly config in {options.anomaly_config}")
         allowed = {

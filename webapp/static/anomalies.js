@@ -67,7 +67,7 @@ function isNullableFinite(value) {
 }
 
 function validateAggregatePayload(data) {
-  if (!isObject(data) || data.schema_version !== "anomaly-dashboard-v2") {
+  if (!isObject(data) || data.schema_version !== "anomaly-dashboard-v3") {
     throw new Error("Published anomaly aggregate has an unsupported schema.");
   }
   if (!isSha256(data.source_manifest_hash)) {

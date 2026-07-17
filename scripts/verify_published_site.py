@@ -230,7 +230,7 @@ def verify_publication(
 
     aggregate_path = dashboard / "anomaly-dashboard-v2.json"
     aggregate = _json_object(aggregate_path)
-    if aggregate.get("schema_version") != "anomaly-dashboard-v2":
+    if aggregate.get("schema_version") != "anomaly-dashboard-v3":
         raise RuntimeError("Unexpected anomaly aggregate schema")
     source_manifest_hash = aggregate.get("source_manifest_hash")
     if not isinstance(source_manifest_hash, str) or len(source_manifest_hash) != 64:
@@ -273,7 +273,7 @@ def verify_publication(
             raise RuntimeError(f"Published docs data parity mismatch: {relative}")
 
     published = _json_object(published_path)
-    if published.get("schema_version") != "published-results-v3":
+    if published.get("schema_version") != "published-results-v4":
         raise RuntimeError("Unexpected published-results manifest schema")
     for field in (
         "artifact_schema_version", "source_manifest_hash", "source_hash",

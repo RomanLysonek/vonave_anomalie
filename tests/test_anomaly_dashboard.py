@@ -48,6 +48,8 @@ def test_canonical_dashboard_is_deterministic_and_honest(tmp_path: Path) -> None
     assert first["weekend_v2_preflight"]["selection_use"] == "excluded"
     assert first["weekend_v2_preflight"]["development_relative_improvement"] is None
     assert first["overnight"]["scientific_status"] == "contaminated"
+    assert first["overnight"]["recommendation_status"] == "archived"
+    assert first["overnight"]["execution_enabled"] is False
     assert len(first["excluded_evidence"]) == 2
     assert all(item["sha256"] for item in first["excluded_evidence"])
     assert first["audit"]["products"] == list(range(1, 31))

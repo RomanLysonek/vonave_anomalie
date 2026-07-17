@@ -13,7 +13,7 @@ import pandas as pd
 
 from artifact_provenance import dataframe_content_hash
 from framework import Config, compute_metrics
-from pipeline import DEVELOPMENT_ORIGINS, recent_benchmark_origins
+from pipeline import DEVELOPMENT_ORIGINS, FINAL_AUDIT_ORIGINS, recent_benchmark_origins
 from systemic_autoencoder_v2 import AutoencoderV2Config
 
 
@@ -134,7 +134,94 @@ EXECUTION_ONLY_CONFIG_FIELDS = {
 }
 CONFIG_FIELDS = set(Config.__dataclass_fields__) - EXECUTION_ONLY_CONFIG_FIELDS
 
-DIAGNOSTIC_BOUNDARY_SCHEMA_VERSION = "development-diagnostic-boundary-v1"
+DIAGNOSTIC_BOUNDARY_SCHEMA_VERSION = "development-diagnostic-boundary-v2"
+TARGET_ROLE_SCHEMA_VERSION = "forecast-target-roles-v1"
+
+
+def target_dates_for_origins(
+    origins: Iterable[Any], horizon: int
+) -> pd.DatetimeIndex:
+    """Expand forecast origins into the dates whose labels they evaluate."""
+    if isinstance(horizon, bool) or int(horizon) != horizon or int(horizon) <= 0:
+        raise ValueError("Target-role horizon must be a positive integer")
+    normalized = pd.DatetimeIndex(pd.to_datetime(list(origins), errors="raise")).normalize()
+    if normalized.hasnans:
+        raise ValueError("Target-role origins cannot contain missing dates")
+    return pd.DatetimeIndex(sorted({
+        origin + pd.Timedelta(days=offset)
+        for origin in normalized
+        for offset in range(1, int(horizon) + 1)
+    }))
+
+
+def validate_target_roles(
+    *,
+    development_origins: Iterable[Any] = (),
+    calibration_origins: Iterable[Any] = (),
+    benchmark_origins: Iterable[Any] = (),
+    frozen_final_origins: Iterable[Any] = FINAL_AUDIT_ORIGINS,
+    horizon: int = 7,
+) -> dict[str, Any]:
+    """Validate and content-bind mutually protected forecast target roles."""
+    if isinstance(horizon, bool) or int(horizon) != horizon or int(horizon) <= 0:
+        raise ValueError("Target-role horizon must be a positive integer")
+    horizon = int(horizon)
+    raw_roles = {
+        "development": development_origins,
+        "calibration": calibration_origins,
+        "benchmark": benchmark_origins,
+        "frozen_final": frozen_final_origins,
+    }
+    role_dates: dict[str, pd.DatetimeIndex] = {}
+    role_records: dict[str, dict[str, Any]] = {}
+    for name, values in raw_roles.items():
+        origins = pd.DatetimeIndex(pd.to_datetime(list(values), errors="raise")).normalize()
+        if origins.hasnans:
+            raise ValueError(f"Target-role {name} origins contain missing dates")
+        if origins.duplicated().any():
+            raise ValueError(f"Target-role {name} origins contain duplicates")
+        origins = origins.sort_values()
+        targets = target_dates_for_origins(origins, horizon)
+        target_values = [str(value.date()) for value in targets]
+        record = {
+            "origins": [str(value.date()) for value in origins],
+            "origin_start": str(origins.min().date()) if len(origins) else None,
+            "origin_end": str(origins.max().date()) if len(origins) else None,
+            "target_start": str(targets.min().date()) if len(targets) else None,
+            "target_end": str(targets.max().date()) if len(targets) else None,
+            "target_count": len(targets),
+            "target_content_sha256": sha256(
+                json.dumps(target_values, separators=(",", ":")).encode("utf-8")
+            ).hexdigest(),
+        }
+        role_dates[name] = targets
+        role_records[name] = record
+
+    protected_pairs = (
+        ("development", "calibration"),
+        ("development", "benchmark"),
+        ("development", "frozen_final"),
+        ("calibration", "benchmark"),
+        ("calibration", "frozen_final"),
+        ("benchmark", "frozen_final"),
+    )
+    for left, right in protected_pairs:
+        overlap = role_dates[left].intersection(role_dates[right])
+        if len(overlap):
+            sample = ", ".join(str(value.date()) for value in overlap[:3])
+            raise ValueError(
+                f"Target-role overlap: {left} and {right} share target date(s) "
+                f"{sample}"
+            )
+    body = {
+        "schema_version": TARGET_ROLE_SCHEMA_VERSION,
+        "horizon_days": horizon,
+        "roles": role_records,
+    }
+    body["content_sha256"] = sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return body
 
 
 def development_diagnostic_boundary(
@@ -148,6 +235,7 @@ def development_diagnostic_boundary(
     if origins.empty:
         raise ValueError("At least one frozen benchmark origin is required")
     earliest_origin = pd.Timestamp(origins.min()).normalize()
+    origins = origins.normalize().sort_values()
     target_end = earliest_origin - pd.Timedelta(days=1)
     input_end = target_end - pd.Timedelta(days=int(horizon))
     dates = pd.to_datetime(train["DateKey"], errors="raise")
@@ -163,6 +251,7 @@ def development_diagnostic_boundary(
         "diagnostic_input_end": str(input_end.date()),
         "difficulty_target_end": str(target_end.date()),
         "earliest_frozen_benchmark_origin": str(earliest_origin.date()),
+        "frozen_benchmark_origins": [str(value.date()) for value in origins],
         "earliest_frozen_benchmark_target": str(
             (earliest_origin + pd.Timedelta(days=1)).date()
         ),
@@ -182,10 +271,15 @@ def validate_development_diagnostic_boundary(
     if horizon <= 0:
         raise ValueError("Diagnostic boundary horizon must be positive")
     earliest = pd.Timestamp(boundary["earliest_frozen_benchmark_origin"]).normalize()
+    frozen_origins = pd.DatetimeIndex(
+        pd.to_datetime(boundary.get("frozen_benchmark_origins", []), errors="raise")
+    ).normalize()
     target_end = pd.Timestamp(boundary["difficulty_target_end"]).normalize()
     input_end = pd.Timestamp(boundary["diagnostic_input_end"]).normalize()
     if not (
-        target_end < earliest
+        len(frozen_origins)
+        and frozen_origins.min() == earliest
+        and target_end < earliest
         and input_end + pd.Timedelta(days=horizon) <= target_end
         and pd.Timestamp(boundary["earliest_frozen_benchmark_target"]) > earliest
     ):

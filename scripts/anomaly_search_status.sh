@@ -27,7 +27,9 @@ with open(sys.argv[1], encoding="utf-8") as handle:
 print(json.dumps({
     "winner": payload["winner"],
     "promote_anomaly_layer": payload["promote_anomaly_layer"],
-    "final_submission_command": payload["final_submission_command"],
+    "status": payload.get("status"),
+    "provenance_status": payload.get("provenance_status"),
+    "execution_enabled": payload.get("execution_enabled", False),
 }, indent=2))
 PY
 fi

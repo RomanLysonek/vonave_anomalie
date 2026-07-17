@@ -17410,8 +17410,10 @@
   "generated_at_basis": "unavailable",
   "overnight": {
     "available": false,
-    "message": "Historical overnight, diagnostic, and search artifacts may contain benchmark-target contamination and are excluded from current evidence.",
+    "execution_enabled": false,
+    "message": "Historical overnight, diagnostic, and search artifacts may contain benchmark-target contamination, are archived and unverified, and cannot be used to invoke the forecasting pipeline.",
     "provenance": "unverified",
+    "recommendation_status": "archived",
     "scientific_status": "contaminated",
     "selection_use": "excluded",
     "state": "contaminated"
@@ -17433,15 +17435,15 @@
     "truth_labels_available": false,
     "validated_anomaly_detector": false
   },
-  "schema_version": "anomaly-dashboard-v2",
+  "schema_version": "anomaly-dashboard-v3",
   "snapshot_as_of": "2026-01-18",
   "snapshot_banner": {
     "generated": null,
     "provenance": "checked-in, content-addressed inputs",
     "snapshot_as_of": "2026-01-18",
-    "version": "anomaly-dashboard-v2"
+    "version": "anomaly-dashboard-v3"
   },
-  "source_hash": "5f25eeea91f1de964eec1ae859de6bd6548d5598f069d7866bae54f15f7994bb",
+  "source_hash": "58b8f0e1d5440caa5a32a56608366dc878a8ed50cddb674bee610147d1786afb",
   "source_inputs": [
     {
       "path": "outputs/anomaly_audit_real/anomaly_metadata.json",

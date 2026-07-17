@@ -207,7 +207,6 @@ outputs/overnight_anomaly_search/
 ├── neural_leaderboard.csv
 ├── confirmation_leaderboard.csv
 ├── recommendation.json
-├── winner_candidate.json
 └── FINAL_REPORT.md
 ```
 
@@ -219,31 +218,12 @@ Every forecast trial directory contains:
 - per-fold checkpoints;
 - `trial.log`.
 
-## Producing the final forecast
+## Archived recommendation evidence
 
-After confirmation, `recommendation.json` contains the exact final command. The winner can also be applied directly:
-
-```bash
-caffeinate -dimsu uv run python ml/pipeline.py \
-  --forecast-strategy direct \
-  --primary-strategy direct \
-  --submission-model NeuralNet \
-  --selection-metric WAPE \
-  --selection-protocol test-aligned \
-  --training-window-days all \
-  --recency-half-life-days none \
-  --baseline-variant weighted_4321 \
-  --trend-features off \
-  --c2-feature-groups price,campaign,lifecycle,market,event \
-  --nn-loss mse \
-  --nn-target-mode residual \
-  --anomaly-config outputs/overnight_anomaly_search/winner_candidate.json \
-  --nn-batch-size auto \
-  --nn-training-backend auto \
-  --resume
-```
-
-`--anomaly-config` accepts the candidate JSON and reproduces every statistical and autoencoder setting. Explicit anomaly CLI switches override values from the file.
+Overnight recommendations are archived and unverified. They set
+`execution_enabled=false`, do not create a winner configuration, and do not
+publish a pipeline command. They cannot be used for final execution until an
+independently trusted JSON-only recommendation contract exists.
 
 ## Leakage contract
 

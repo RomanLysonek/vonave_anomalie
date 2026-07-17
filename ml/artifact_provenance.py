@@ -421,14 +421,25 @@ def forecast_trial_fingerprint(
     development_origins: Iterable[Any],
     benchmark_origins: Iterable[Any],
 ) -> dict[str, Any]:
-    from anomaly_search_common import apply_candidate_config, selected_forecasting_config
+    from anomaly_search_common import (
+        apply_candidate_config,
+        selected_forecasting_config,
+        validate_target_roles,
+    )
 
+    development_origins = tuple(development_origins)
+    benchmark_origins = tuple(benchmark_origins)
     resolved_cfg = selected_forecasting_config()
     apply_candidate_config(resolved_cfg, dict(candidate))
     resolved_cfg.cv_epochs = int(epochs)
     resolved_cfg.final_epochs = int(epochs)
     resolved_cfg.seeds = tuple(int(seed) for seed in seeds)
     resolved_cfg.autoencoder_device = device
+    target_roles = validate_target_roles(
+        development_origins=development_origins,
+        benchmark_origins=benchmark_origins,
+        horizon=resolved_cfg.horizon,
+    )
     semantic = {
         "candidate": candidate,
         "resolved_config": asdict(resolved_cfg),
@@ -440,9 +451,10 @@ def forecast_trial_fingerprint(
         "neural_training_identity": neural_training_identity(resolved_cfg),
         "development_origins": [pd.Timestamp(value).isoformat() for value in development_origins],
         "benchmark_origins": [pd.Timestamp(value).isoformat() for value in benchmark_origins],
+        "target_role_validation": target_roles,
     }
     return artifact_fingerprint(
-        schema_version="anomaly-forecast-trial-v3",
+        schema_version="anomaly-forecast-trial-v4",
         semantic=semantic,
         dataframes={"train": train_data},
         source_paths=FORECAST_TRIAL_SOURCE_PATHS,
@@ -459,6 +471,14 @@ def diagnostic_trial_fingerprint(
     save_scores: bool,
     diagnostic_boundary: Mapping[str, Any],
 ) -> dict[str, Any]:
+    from anomaly_search_common import validate_target_roles
+
+    cutoffs = tuple(cutoffs)
+    target_roles = validate_target_roles(
+        calibration_origins=cutoffs,
+        benchmark_origins=diagnostic_boundary.get("frozen_benchmark_origins", ()),
+        horizon=int(diagnostic_boundary.get("horizon_days", 0)),
+    )
     semantic = {
         "candidate": candidate,
         "cutoffs": [pd.Timestamp(value).isoformat() for value in cutoffs],
@@ -467,6 +487,7 @@ def diagnostic_trial_fingerprint(
         "resolved_device": resolve_compute_device(device),
         "save_scores": bool(save_scores),
         "diagnostic_boundary": diagnostic_boundary,
+        "target_role_validation": target_roles,
     }
     return artifact_fingerprint(
         schema_version="autoencoder-diagnostic-v4",
@@ -483,10 +504,10 @@ def _validate_result_body(
 ) -> tuple[bool, str]:
     schema = payload.get("schema_version")
     required_by_schema = {
-        "anomaly-forecast-trial-v3": {
+        "anomaly-forecast-trial-v4": {
             "schema_version", "candidate", "model", "epochs", "seeds",
             "development_origins", "benchmark_origins", "development",
-            "benchmark", "status",
+            "benchmark", "target_role_validation", "status",
         },
         "autoencoder-diagnostic-v4": {
             "schema_version", "candidate", "cutoffs", "seeds", "runs",
@@ -505,7 +526,7 @@ def _validate_result_body(
     if dict(expected_body) != result_body_manifest(payload):
         return False, "canonical result-body digest mismatch"
 
-    if schema != "anomaly-forecast-trial-v3":
+    if schema != "anomaly-forecast-trial-v4":
         return True, "valid"
     outputs = manifest.get("outputs")
     if not isinstance(outputs, Mapping):
@@ -514,7 +535,18 @@ def _validate_result_body(
     if not set(required_oofs).issubset(outputs):
         return False, "forecast result is missing authenticated OOF outputs"
     try:
-        from anomaly_search_common import summarize_oof
+        from anomaly_search_common import summarize_oof, validate_target_roles
+
+        role_validation = payload.get("target_role_validation")
+        if not isinstance(role_validation, Mapping):
+            return False, "forecast result target-role validation is missing"
+        recomputed_roles = validate_target_roles(
+            development_origins=payload["development_origins"],
+            benchmark_origins=payload["benchmark_origins"],
+            horizon=int(role_validation.get("horizon_days", 0)),
+        )
+        if dict(role_validation) != recomputed_roles:
+            return False, "forecast result target-role validation mismatch"
 
         for split, origins_key in (
             ("development", "development_origins"),

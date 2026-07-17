@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pickle
+from pathlib import Path
 import pytest
 import systemic_autoencoder_v2 as autoencoder_module
 
@@ -15,6 +17,7 @@ from systemic_autoencoder_v2 import (
     fit_score_systemic_autoencoder_v2,
     build_cached_autoencoder_profile,
     _cache_fingerprint,
+    _cache_key,
 )
 
 
@@ -173,8 +176,8 @@ def test_autoencoder_cache_validates_content_config_and_pickle_hash(
     assert len(calls) == 3
 
     cfg.autoencoder_window -= 1
-    original_pickle = tmp_path / f"{first_meta['cache_key']}.pkl"
-    original_pickle.write_bytes(b"corrupt")
+    original_profile = tmp_path / f"{first_meta['cache_key']}.parquet"
+    original_profile.write_bytes(b"corrupt")
     with pytest.raises(RuntimeError, match="confirm-recompute-stale"):
         build_cached_autoencoder_profile(raw, cfg)
     assert len(calls) == 3
@@ -223,3 +226,23 @@ def test_autoencoder_cache_fingerprint_excludes_publication_sources(
     assert tuple(captured) == AUTOENCODER_CACHE_SOURCE_PATHS
     assert all(path.is_file() for path in AUTOENCODER_CACHE_SOURCE_PATHS)
     assert not any("webapp" in path.parts or "docs" in path.parts for path in captured)
+
+
+def test_legacy_pickle_cache_cannot_execute(tmp_path) -> None:
+    marker = tmp_path / "executed"
+
+    class Malicious:
+        def __reduce__(self):
+            return (Path.write_text, (marker, "executed"))
+
+    raw = _synthetic_raw(days=3, products=1)
+    cfg = Config(autoencoder_cache_dir=str(tmp_path))
+    key = _cache_key(raw, autoencoder_module.config_from_framework(cfg))
+    (tmp_path / f"{key}.pkl").write_bytes(pickle.dumps(Malicious()))
+
+    with pytest.raises(RuntimeError, match="cache build is not authorized"):
+        build_cached_autoencoder_profile(raw, cfg)
+    assert not marker.exists()
+    assert "read_pickle" not in Path(
+        autoencoder_module.__file__
+    ).read_text(encoding="utf-8")

@@ -7,7 +7,7 @@ SCRIPT = ROOT / "webapp" / "static" / "anomalies.js"
 
 def test_anomaly_client_enforces_aggregate_and_product_provenance_contracts() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
-    assert 'data.schema_version !== "anomaly-dashboard-v2"' in source
+    assert 'data.schema_version !== "anomaly-dashboard-v3"' in source
     assert 'data.schema_version !== "anomaly-product-v2"' in source
     assert "isSha256(data.source_manifest_hash)" in source
     assert "data.product_id !== selected" in source

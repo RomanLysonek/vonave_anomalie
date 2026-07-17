@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 
 import numpy as np
 import pandas as pd
@@ -12,7 +13,7 @@ from anomaly_search_common import apply_candidate_config, load_json, selected_fo
 from framework import Config, compute_baseline, load_raw
 from models.naive_baselines import moving_average_predict, seasonal_naive_predict
 from pipeline import run_final_forecast_direct
-from weekend_v2_common import apply_meta_model, apply_specialist_gate, apply_weight_plan, load_pickle
+from weekend_v2_common import apply_weight_plan
 from artifact_provenance import (
     artifact_fingerprint,
     config_hash,
@@ -28,9 +29,17 @@ from artifact_provenance import (
 )
 
 
-MEMBER_CACHE_SCHEMA_VERSION = "weekend-v2-final-member-v4"
-RECOMMENDATION_MANIFEST_SCHEMA_VERSION = "weekend-v2-recommendation-provenance-v2"
+MEMBER_CACHE_SCHEMA_VERSION = "weekend-v2-final-member-v5"
+RECOMMENDATION_MANIFEST_SCHEMA_VERSION = "weekend-v2-recommendation-provenance-v3"
 MEMBER_KEY_COLUMNS = ("ProductId", "DateKey")
+SAFE_CANDIDATE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+TRUSTED_PLAN_METHODS = {
+    "control",
+    "global_convex",
+    "horizon_convex",
+    "product_convex",
+    "aggregate_reconciled",
+}
 
 
 def _member_fingerprint(
@@ -209,6 +218,131 @@ def _safe_relative_path(base: Path, raw: str) -> Path:
     return resolved
 
 
+def _finite_number(value: object, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise RuntimeError(f"Declarative plan {label} must be numeric")
+    number = float(value)
+    if not np.isfinite(number):
+        raise RuntimeError(f"Declarative plan {label} must be finite")
+    return number
+
+
+def _validate_weights(value: object, columns: set[str], label: str) -> None:
+    if not isinstance(value, dict) or set(value) != columns:
+        raise RuntimeError("Recommendation weights do not match authenticated members")
+    weights = [_finite_number(value[column], f"{label}.{column}") for column in columns]
+    if any(weight < 0.0 or weight > 1.0 for weight in weights):
+        raise RuntimeError(f"Declarative plan {label} weights must be in [0, 1]")
+    if not np.isclose(sum(weights), 1.0, rtol=0.0, atol=1e-8):
+        raise RuntimeError(f"Declarative plan {label} weights must sum to one")
+
+
+def _validate_indexed_weights(
+    value: object,
+    columns: set[str],
+    label: str,
+    *,
+    maximum_key: int | None = None,
+) -> None:
+    if not isinstance(value, dict):
+        raise RuntimeError(f"Declarative plan {label} must be an object")
+    for key, weights in value.items():
+        try:
+            parsed = int(key)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(f"Declarative plan {label} key is invalid: {key!r}") from exc
+        if str(parsed) != key or parsed <= 0 or (
+            maximum_key is not None and parsed > maximum_key
+        ):
+            raise RuntimeError(f"Declarative plan {label} key is out of bounds: {key!r}")
+        _validate_weights(weights, columns, f"{label}.{key}")
+
+
+def _validate_declarative_plan(plan: object, columns: set[str]) -> None:
+    if not isinstance(plan, dict):
+        raise RuntimeError("Recommendation winner plan is invalid")
+    method = plan.get("method")
+    if method not in TRUSTED_PLAN_METHODS or "model_path" in plan:
+        raise RuntimeError(
+            "Unsupported/untrusted recommendation artifact: only fixed declarative "
+            "control or numeric convex plans can execute"
+        )
+    allowed_keys = {
+        "control": {"method", "member"},
+        "global_convex": {"method", "weights"},
+        "horizon_convex": {
+            "method", "global_weights", "horizon_weights", "shrinkage_rows"
+        },
+        "product_convex": {
+            "method", "global_weights", "product_weights", "shrinkage_rows"
+        },
+        "aggregate_reconciled": {
+            "method", "weights", "horizon_scales", "shrinkage_demand"
+        },
+    }[method]
+    if set(plan) != allowed_keys:
+        raise RuntimeError("Declarative plan contains unsupported fields")
+    if method == "control":
+        if plan["member"] not in columns:
+            raise RuntimeError("Control plan references an unauthenticated member")
+        return
+    if method in {"global_convex", "aggregate_reconciled"}:
+        _validate_weights(plan["weights"], columns, "weights")
+    else:
+        _validate_weights(plan["global_weights"], columns, "global_weights")
+    if method == "horizon_convex":
+        _validate_indexed_weights(
+            plan["horizon_weights"], columns, "horizon_weights", maximum_key=7
+        )
+        if _finite_number(plan["shrinkage_rows"], "shrinkage_rows") <= 0:
+            raise RuntimeError("Declarative plan shrinkage_rows must be positive")
+    elif method == "product_convex":
+        _validate_indexed_weights(plan["product_weights"], columns, "product_weights")
+        if _finite_number(plan["shrinkage_rows"], "shrinkage_rows") <= 0:
+            raise RuntimeError("Declarative plan shrinkage_rows must be positive")
+    elif method == "aggregate_reconciled":
+        scales = plan["horizon_scales"]
+        if not isinstance(scales, dict):
+            raise RuntimeError("Declarative plan horizon_scales must be an object")
+        for key, value in scales.items():
+            if (
+                not isinstance(key, str)
+                or not key.isdigit()
+                or str(int(key)) != key
+                or not 1 <= int(key) <= 7
+            ):
+                raise RuntimeError(f"Declarative plan horizon scale key is invalid: {key!r}")
+            scale = _finite_number(value, f"horizon_scales.{key}")
+            if not 0.85 <= scale <= 1.15:
+                raise RuntimeError("Declarative plan horizon scale is out of bounds")
+        if _finite_number(plan["shrinkage_demand"], "shrinkage_demand") <= 0:
+            raise RuntimeError("Declarative plan shrinkage_demand must be positive")
+
+
+def _contains_model_path(value: object) -> bool:
+    if isinstance(value, dict):
+        return "model_path" in value or any(
+            _contains_model_path(item) for item in value.values()
+        )
+    if isinstance(value, list):
+        return any(_contains_model_path(item) for item in value)
+    return False
+
+
+def _validate_execution_contract(recommendation: dict) -> None:
+    if _contains_model_path(recommendation.get("winner")):
+        raise RuntimeError(
+            "Unsupported/untrusted recommendation artifact: model_path is forbidden"
+        )
+    if (
+        recommendation.get("execution_enabled") is not True
+        or recommendation.get("status") != "verified_declarative"
+    ):
+        raise RuntimeError(
+            "Unsupported/untrusted recommendation artifact: execution is not enabled"
+        )
+
+
 def _validate_plan_member_identity(recommendation: dict) -> None:
     members = recommendation.get("members")
     if not isinstance(members, list) or not members:
@@ -221,6 +355,7 @@ def _validate_plan_member_identity(recommendation: dict) -> None:
         candidate_id = candidate.get("id") if isinstance(candidate, dict) else None
         if (
             not isinstance(candidate_id, str)
+            or SAFE_CANDIDATE_ID.fullmatch(candidate_id) is None
             or column != f"member__{candidate_id}"
             or column in columns
             or candidate_id in candidate_ids
@@ -228,36 +363,22 @@ def _validate_plan_member_identity(recommendation: dict) -> None:
             raise RuntimeError("Recommendation member/candidate identity mismatch")
         columns.add(column)
         candidate_ids.add(candidate_id)
-    try:
-        referenced = active_members(recommendation)
-    except (KeyError, TypeError, ValueError) as exc:
-        raise RuntimeError("Recommendation winner plan is invalid") from exc
+    _validate_declarative_plan(
+        recommendation.get("winner", {}).get("plan"), columns
+    )
+    referenced = active_members(recommendation)
     if not referenced or not referenced.issubset(columns):
         raise RuntimeError("Recommendation plan references unauthenticated members")
     reference = recommendation.get("reference_member")
     if reference is not None and reference not in columns:
         raise RuntimeError("Recommendation reference member is unauthenticated")
-    plan = recommendation["winner"]["plan"]
-    method = plan["method"]
-    weight_sets: list[object] = []
-    if method in {"global_convex", "aggregate_reconciled"}:
-        weight_sets.append(plan.get("weights"))
-    elif method == "horizon_convex":
-        weight_sets.extend(
-            [plan.get("global_weights"), *list((plan.get("horizon_weights") or {}).values())]
-        )
-    elif method == "product_convex":
-        weight_sets.extend(
-            [plan.get("global_weights"), *list((plan.get("product_weights") or {}).values())]
-        )
-    if any(not isinstance(weights, dict) or set(weights) != columns for weights in weight_sets):
-        raise RuntimeError("Recommendation weights do not match authenticated members")
 
 
 def _validate_recommendation(
     recommendation_path: Path,
     recommendation: dict,
 ) -> dict:
+    _validate_execution_contract(recommendation)
     manifest_name = recommendation.get("provenance_manifest")
     if not isinstance(manifest_name, str):
         raise RuntimeError(
@@ -265,7 +386,7 @@ def _validate_recommendation(
             "Do not reuse it; a future search must deliberately produce and confirm "
             "a content-bound recommendation."
         )
-    if recommendation.get("schema_version") != "weekend-v2-search-v4":
+    if recommendation.get("schema_version") != "weekend-v2-search-v5":
         raise RuntimeError("Recommendation schema is unsupported or unverifiable")
     manifest_path = _safe_relative_path(recommendation_path.parent, manifest_name)
     if not manifest_path.exists():
@@ -359,36 +480,8 @@ def _validate_recommendation(
         or provenance.get("winner_plan_sha256") != config_hash(winner.get("plan"))
     ):
         raise RuntimeError("Recommendation winner body/weight plan digest mismatch")
-    required_pickles = provenance.get("required_pickles")
-    if not isinstance(required_pickles, dict):
-        raise RuntimeError("Recommendation required-pickle manifest is invalid")
-    winner_plan = winner["plan"]
-    expected_pickle_paths = (
-        {winner_plan["model_path"]}
-        if winner_plan.get("method") in {"ridge_residual", "risk_gate", "specialist_gate"}
-        else set()
-    )
-    if set(required_pickles) != expected_pickle_paths:
-        raise RuntimeError("Recommendation required-pickle set does not match winner plan")
-    for raw_path, expected in required_pickles.items():
-        model_path = _safe_relative_path(recommendation_path.parent, raw_path)
-        if file_fingerprint(model_path) != expected:
-            raise RuntimeError(f"Required recommendation pickle hash mismatch: {raw_path}")
-        bundle = load_pickle(model_path)
-        all_columns = [member["column"] for member in recommendation["members"]]
-        if winner_plan["method"] == "specialist_gate":
-            expected_members = [
-                winner_plan["control_column"],
-                winner_plan["specialist_column"],
-            ]
-        else:
-            expected_members = all_columns
-        if (
-            not isinstance(bundle, dict)
-            or bundle.get("kind") != winner_plan["method"]
-            or bundle.get("members") != expected_members
-        ):
-            raise RuntimeError(f"Required recommendation pickle identity mismatch: {raw_path}")
+    if provenance.get("artifact_requirements") != []:
+        raise RuntimeError("Recommendation contains untrusted artifact requirements")
     return provenance
 
 
@@ -398,10 +491,6 @@ def active_members(recommendation: dict) -> set[str]:
     method = plan["method"]
     if method == "control":
         return {plan["member"]}
-    if method in {"ridge_residual", "risk_gate"}:
-        return {item["column"] for item in recommendation["members"]}
-    if method == "specialist_gate":
-        return {plan["control_column"], plan["specialist_column"]}
     if method in {"global_convex", "aggregate_reconciled"}:
         return {key for key, value in plan["weights"].items() if float(value) > 1e-8}
     if method == "horizon_convex":
@@ -453,7 +542,12 @@ def main() -> None:
         identity_cfg.final_epochs = args.epochs
         identity_cfg.seeds = seeds
         expected_neural_identity = neural_training_identity(identity_cfg)
-        member_dir = output / "members" / candidate["id"]
+        members_root = (output / "members").resolve()
+        member_dir = (members_root / candidate["id"]).resolve()
+        try:
+            member_dir.relative_to(members_root)
+        except ValueError as exc:
+            raise RuntimeError("Recommendation candidate ID escapes member output root") from exc
         member_fingerprint = _member_fingerprint(
             candidate,
             train,
@@ -548,17 +642,8 @@ def main() -> None:
         "global_convex", "horizon_convex", "product_convex", "aggregate_reconciled"
     }:
         prediction = apply_weight_plan(frame, plan, member_columns)
-    elif method in {"ridge_residual", "risk_gate", "specialist_gate"}:
-        model_path = _safe_relative_path(
-            recommendation_path.parent, str(plan["model_path"])
-        )
-        bundle = load_pickle(model_path)
-        if method == "specialist_gate":
-            prediction = apply_specialist_gate(frame, bundle)
-        else:
-            prediction = apply_meta_model(frame, bundle)
     else:
-        raise ValueError(method)
+        raise RuntimeError(f"Unsupported declarative plan method: {method}")
 
     prediction = np.clip(np.asarray(prediction, dtype=float), 0.0, None)
     frame["prediction_weekend_v2_raw"] = prediction
@@ -570,7 +655,7 @@ def main() -> None:
     frame.to_csv(output / "final_member_forecasts.csv", index=False)
     frame.to_parquet(output / "final_member_forecasts.parquet", index=False)
     write_json(output / "run_metadata.json", {
-        "schema_version": "weekend-v2-final-v3",
+        "schema_version": "weekend-v2-final-v4",
         "recommendation": str(recommendation_path),
         "winner": winner,
         "trained_member_ids": trained,

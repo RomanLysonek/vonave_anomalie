@@ -19,6 +19,7 @@ from anomaly_search_common import (
     load_json,
     selected_forecasting_config,
     summarize_oof,
+    validate_target_roles,
     write_json,
 )
 from framework import load_raw
@@ -71,6 +72,11 @@ def main() -> None:
         train, _ = load_raw(cfg)
         development_origins = _parse_origins(args.development_origins)
         benchmark_origins = _parse_origins(args.benchmark_origins)
+        target_role_validation = validate_target_roles(
+            development_origins=development_origins,
+            benchmark_origins=benchmark_origins,
+            horizon=cfg.horizon,
+        )
         fingerprint = forecast_trial_fingerprint(
             candidate=candidate,
             train_data=train,
@@ -128,13 +134,14 @@ def main() -> None:
             if not frame.empty
         ]
         payload = {
-            "schema_version": "anomaly-forecast-trial-v3",
+            "schema_version": "anomaly-forecast-trial-v4",
             "candidate": candidate,
             "model": args.model,
             "epochs": args.epochs,
             "seeds": list(cfg.seeds),
             "development_origins": [str(value.date()) for value in development_origins],
             "benchmark_origins": [str(value.date()) for value in benchmark_origins],
+            "target_role_validation": target_role_validation,
             "development": summarize_oof(frames["development"], args.model),
             "benchmark": summarize_oof(frames["benchmark"], args.model),
             "timings": timings,
@@ -155,7 +162,7 @@ def main() -> None:
         }, indent=2))
     except Exception as exc:
         failure = {
-            "schema_version": "anomaly-forecast-trial-v3",
+            "schema_version": "anomaly-forecast-trial-v4",
             "candidate": candidate,
             "model": args.model,
             "status": "failed",

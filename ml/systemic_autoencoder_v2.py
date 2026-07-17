@@ -746,7 +746,7 @@ def config_from_framework(cfg: Any) -> AutoencoderV2Config:
     )
 
 
-AUTOENCODER_CACHE_SCHEMA_VERSION = "systemic-autoencoder-v2-cache-v4"
+AUTOENCODER_CACHE_SCHEMA_VERSION = "systemic-autoencoder-v2-cache-v5"
 AUTOENCODER_CACHE_SOURCE_PATHS = (
     Path(__file__).resolve(),
     Path(__file__).resolve().parent / "anomaly_detection.py",
@@ -786,7 +786,7 @@ def build_cached_autoencoder_profile(
     cache_root = Path(getattr(cfg, "autoencoder_cache_dir", "outputs/anomaly_cache"))
     fingerprint = _cache_fingerprint(raw_df, ae_cfg)
     key = config_hash(fingerprint)[:20]
-    profile_path = cache_root / f"{key}.pkl"
+    profile_path = cache_root / f"{key}.parquet"
     metadata_path = cache_root / f"{key}.json"
     cache_exists = profile_path.exists() or metadata_path.exists()
     if cache_exists:
@@ -803,7 +803,7 @@ def build_cached_autoencoder_profile(
             )
             if not valid:
                 raise ValueError(reason)
-            profile = pd.read_pickle(profile_path)
+            profile = pd.read_parquet(profile_path)
             if not isinstance(profile, pd.DataFrame):
                 raise TypeError("cached profile is not a DataFrame")
             if sidecar.get("profile_content_hash") != dataframe_content_hash(profile):
@@ -836,8 +836,8 @@ def build_cached_autoencoder_profile(
     elif torch.cuda.is_available():
         torch.cuda.empty_cache()
     cache_root.mkdir(parents=True, exist_ok=True)
-    tmp_profile = profile_path.with_suffix(f".tmp-{Path(profile_path).suffix.lstrip('.')}")
-    profile.to_pickle(tmp_profile)
+    tmp_profile = profile_path.with_suffix(".tmp.parquet")
+    profile.to_parquet(tmp_profile, index=False)
     tmp_profile.replace(profile_path)
     sidecar = {
         "schema_version": AUTOENCODER_CACHE_SCHEMA_VERSION,

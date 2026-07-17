@@ -45,7 +45,9 @@ with open(sys.argv[1], encoding="utf-8") as handle:
 print(json.dumps({
     "winner": payload["winner"],
     "promote_weekend_v2": payload["promote_weekend_v2"],
-    "final_submission_command": payload["final_submission_command"],
+    "status": payload.get("status"),
+    "execution_enabled": payload.get("execution_enabled", False),
+    "final_submission_command": payload.get("final_submission_command"),
 }, indent=2))
 PY
 fi

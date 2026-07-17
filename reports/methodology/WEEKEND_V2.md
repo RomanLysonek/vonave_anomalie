@@ -121,13 +121,13 @@ The convex search is vectorized; tens of thousands of Dirichlet draws are scored
 - The final-audit origins are not read by weekend-v2.
 - Test-week actual demand is never used.
 
-Final execution accepts only recommendation schema v4 with provenance schema v2.
+Final execution accepts only recommendation schema v5 with provenance schema v3.
 Every member binds a safe search-root-relative `result.json` path, the complete
 expected fingerprint, canonical result-body digest, candidate identity,
 development/benchmark summary digests, and both OOF file fingerprints. The final
-runner revalidates every source result and OOF, plan/weight membership, and any
-authenticated pickle before loading training data. Missing, legacy, traversing,
-or tampered sources fail closed.
+runner revalidates every source result and OOF plus strict numeric plan/weight
+membership before loading training data. Pickles, learned gates, `model_path`,
+missing, legacy, traversing, or tampered sources fail closed.
 
 ## Promotion gates
 
@@ -223,7 +223,10 @@ outputs/weekend_v2_search/
   FINAL_REPORT.md
 ```
 
-The final command is stored in `recommendation.json`. It trains only the members required by the winning plan and writes:
+Only a verified declarative control/convex winner receives a final command in
+`recommendation.json`. Learned ridge/risk/specialist winners are archived with
+`execution_enabled=false` and no command. A permitted plan trains only the
+members required by the winning plan and writes:
 
 ```text
 outputs/weekend_v2_search/final/submission.csv

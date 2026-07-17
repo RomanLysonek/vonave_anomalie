@@ -53,6 +53,7 @@ from anomaly_search_common import (
     load_json,
     make_hybrid_candidate,
     selected_forecasting_config,
+    validate_target_roles,
     validate_development_diagnostic_boundary,
     write_json,
 )
@@ -67,7 +68,7 @@ from artifact_provenance import (
 )
 
 
-SCHEMA_VERSION = "overnight-anomaly-search-v3"
+SCHEMA_VERSION = "overnight-anomaly-search-v4"
 
 
 def parse_args() -> argparse.Namespace:
@@ -337,6 +338,56 @@ def _forecast_fingerprints(
             benchmark_origins=bench_origins,
         )
         for item in candidates
+    }
+
+
+def _profile_target_roles(
+    train: pd.DataFrame,
+    profile: SearchProfile,
+    diagnostic_boundary: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate every profile stage before any candidate subprocess can start."""
+    cfg = selected_forecasting_config()
+    diagnostic_benchmark = benchmark_origins(
+        train,
+        max(
+            profile.proxy_benchmark_origins,
+            profile.neural_benchmark_origins,
+            profile.confirmation_benchmark_origins,
+        ),
+        cfg,
+    )
+    stages = {
+        "diagnostic": validate_target_roles(
+            calibration_origins=_diagnostic_cutoffs(
+                train, profile.autoencoder_cutoffs, diagnostic_boundary
+            ),
+            benchmark_origins=diagnostic_benchmark,
+            horizon=cfg.horizon,
+        )
+    }
+    for name, development_count, benchmark_count in (
+        ("proxy", profile.proxy_development_origins, profile.proxy_benchmark_origins),
+        ("neural", profile.neural_development_origins, profile.neural_benchmark_origins),
+        (
+            "confirmation",
+            profile.confirmation_development_origins,
+            profile.confirmation_benchmark_origins,
+        ),
+    ):
+        stages[name] = validate_target_roles(
+            development_origins=development_origins(development_count),
+            benchmark_origins=benchmark_origins(train, benchmark_count, cfg),
+            horizon=cfg.horizon,
+        )
+    return {
+        "schema_version": "search-target-role-validation-v1",
+        "profile": profile.name,
+        "stages": stages,
+        "content_sha256": artifact_fingerprint(
+            schema_version="search-target-role-validation-v1",
+            semantic=stages,
+        )["semantic_hash"],
     }
 
 
@@ -794,21 +845,18 @@ def _confirmation_recommendation(
         "comparisons": comparisons,
         "winner": winner,
         "promote_anomaly_layer": winner["family"] != "control",
-        "final_submission_command": (
-            "caffeinate -dimsu uv run python ml/pipeline.py "
-            "--forecast-strategy direct --primary-strategy direct "
-            "--submission-model NeuralNet --selection-metric WAPE "
-            "--selection-protocol test-aligned --training-window-days all "
-            "--recency-half-life-days none --baseline-variant weighted_4321 "
-            "--trend-features off "
-            "--c2-feature-groups price,campaign,lifecycle,market,event "
-            "--nn-loss mse --nn-target-mode residual "
-            f"--anomaly-config {root / 'winner_candidate.json'} "
-            "--nn-batch-size auto --nn-training-backend auto --resume"
+        "status": "archived",
+        "provenance_status": "unverified",
+        "execution_enabled": False,
+        "execution_reason": (
+            "Archived search evidence is not an independently authenticated "
+            "JSON-only recommendation contract."
         ),
     }
     write_json(root / "recommendation.json", payload)
-    write_json(root / "winner_candidate.json", winner)
+    winner_path = root / "winner_candidate.json"
+    if winner_path.exists():
+        winner_path.unlink()
     return payload
 
 
@@ -848,17 +896,34 @@ def _write_report(root: Path, profile: SearchProfile, recommendation: dict[str, 
         )
     lines += [
         "",
-        "The machine-readable configuration is in `winner_candidate.json`. All fold OOF",
-        "predictions, logs, checkpoints, autoencoder caches and intermediate leaderboards",
-        "remain under this output directory so the decision can be audited or resumed.",
+        "This result is archived, unverified evidence and is not executable. No winner",
+        "configuration or pipeline command is generated. Fold OOF predictions, logs,",
+        "checkpoints, caches and leaderboards remain available only for audit.",
     ]
     (root / "FINAL_REPORT.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _invalidate_legacy_execution_artifacts(root: Path) -> None:
+    """Fail closed before dry-run, stage-only, validation, or crash exits."""
+    for name in ("recommendation.json", "winner_candidate.json"):
+        path = root / name
+        if path.exists():
+            path.unlink()
+    write_json(root / "execution_disabled.json", {
+        "schema_version": "overnight-execution-disabled-v1",
+        "execution_enabled": False,
+        "reason": (
+            "Overnight evidence has no independently trusted JSON-only execution contract."
+        ),
+    })
 
 
 def main() -> None:
     args = parse_args()
     started = time.monotonic()
     root = Path(args.output_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    _invalidate_legacy_execution_artifacts(root)
     profile = PROFILES[args.profile]
     preflight = _preflight(args.device, root)
     train, _ = load_raw(Config())
@@ -872,6 +937,9 @@ def main() -> None:
         benchmark_origins(
             train, frozen_benchmark_count, selected_forecasting_config()
         ),
+    )
+    target_role_validation = _profile_target_roles(
+        train, profile, diagnostic_boundary
     )
     write_json(root / "diagnostic_boundary.json", diagnostic_boundary)
     ae_candidates = generate_autoencoder_candidates(
@@ -887,6 +955,7 @@ def main() -> None:
         "preflight": preflight,
         "autoencoder_candidates": ae_candidates,
         "diagnostic_boundary": diagnostic_boundary,
+        "target_role_validation": target_role_validation,
         "environment": environment_metadata(
             requested_device=args.device,
             resolved_device=preflight["resolved_device"],
@@ -899,6 +968,7 @@ def main() -> None:
                 "device": args.device,
                 "autoencoder_candidates": ae_candidates,
                 "diagnostic_boundary": diagnostic_boundary,
+                "target_role_validation": target_role_validation,
             },
             dataframes={"train": train},
             source_paths=OVERNIGHT_SEARCH_SOURCE_PATHS,

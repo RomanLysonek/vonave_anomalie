@@ -1,5 +1,5 @@
 {
-  "artifact_schema_version": "anomaly-dashboard-v2",
+  "artifact_schema_version": "anomaly-dashboard-v3",
   "configuration_hash": "9b55f4c92a953f51d87b6e394058c35f4bf54329ef34edbeadc1efd473cb3e9c",
   "data_hashes": {
     "outputs/anomaly_audit_real/anomaly_metadata.json": "69ebf1fecfea03281a17e9638dabe161b2112bcdec100a09ed11f02a3c507d0c",
@@ -86,8 +86,8 @@
   "input_data_hash": "136ccbb1676ba5bee1470e2848a3a81afb4b8a77e81747f75c1850bad7528346",
   "outputs": {
     "anomaly-dashboard-v2.json": {
-      "sha256": "3765404cc539f017aabd1cc70411d134367c72110a7a3a4b9228f6f6dd4f9027",
-      "size": 545123
+      "sha256": "42eddac0875eb37eb317a4de6c2d12f8d671e30c3ba462cdebd24c8568c5ba75",
+      "size": 545241
     },
     "anomaly-products-v2/product-1.json": {
       "sha256": "be5cb7d52d4c61b401dc944d4b514e1eb424e05f51b4fc8da91d570eabca9819",
@@ -215,14 +215,14 @@
     "Historical overnight, diagnostic, and search artifacts may contain benchmark-target contamination; scientific status is contaminated and provenance is unverified.",
     "Legacy overnight/search/preflight artifacts are excluded from all current candidate and selection evidence."
   ],
-  "schema_version": "published-results-v3",
+  "schema_version": "published-results-v4",
   "site_artifacts": {
     ".nojekyll": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "anomalies.html": "1c16800a5c6fc5f4d286f07de86bba9512529abbadd376d817a2230839083c36",
-    "anomalies.js": "6fb89bc4b3ab18757a6a591c903d36db0ecec00a8611d56596beef94a8645c51",
+    "anomalies.js": "0bc0e19421f433ea82e1a9574688e8910182e8b5d4f9bb0132670ca41fc63900",
     "app.js": "fb056233eb3071e08ccbe046e5897451b2542cd557fbf7acc54ead98a8981e82",
     "common.js": "f749d36864e402977213dfba637b7c1a92b25a6a008e742f0f9cbca00788dd86",
-    "data/anomaly-dashboard-v2.json": "3765404cc539f017aabd1cc70411d134367c72110a7a3a4b9228f6f6dd4f9027",
+    "data/anomaly-dashboard-v2.json": "42eddac0875eb37eb317a4de6c2d12f8d671e30c3ba462cdebd24c8568c5ba75",
     "data/anomaly-products-v2/product-1.json": "be5cb7d52d4c61b401dc944d4b514e1eb424e05f51b4fc8da91d570eabca9819",
     "data/anomaly-products-v2/product-10.json": "a7f261f8da3486373b0217c6a0ea2fa8ce5389664b787d1767f2b33397426814",
     "data/anomaly-products-v2/product-11.json": "d5c77a450f83b8e9223067fbd834678776937199443c5de1d7be91b9625ad787",
@@ -265,6 +265,6 @@
     "styles.css": "89782513328004a98fa784f410bbfd91e1f7aa6ae2b755fbc8b0b0ec28ed91f1"
   },
   "snapshot_as_of": "2026-01-18",
-  "source_hash": "2f35e83eee619cfc4114ad880e480d7f05e708636e449e9fe4b2b283de09efbe",
+  "source_hash": "85eae9d7d91d2d32bea957aeada4d215ea0cc7d1282a7d8f5e9ad953b3255406",
   "source_manifest_hash": "71a69b16bf097e8e4b816ebfd25c618afc3d5c4a879cc1e6d065d7d550c78311"
 }

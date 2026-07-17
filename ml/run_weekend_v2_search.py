@@ -26,6 +26,7 @@ from anomaly_search_common import (
     development_origins,
     load_json,
     selected_forecasting_config,
+    validate_target_roles,
     write_json,
 )
 from framework import Config, load_raw
@@ -62,8 +63,8 @@ from artifact_provenance import (
     WEEKEND_SEARCH_SOURCE_PATHS,
 )
 
-SCHEMA_VERSION = "weekend-v2-search-v4"
-RECOMMENDATION_MANIFEST_SCHEMA_VERSION = "weekend-v2-recommendation-provenance-v2"
+SCHEMA_VERSION = "weekend-v2-search-v5"
+RECOMMENDATION_MANIFEST_SCHEMA_VERSION = "weekend-v2-recommendation-provenance-v3"
 
 
 def parse_args() -> argparse.Namespace:
@@ -267,6 +268,45 @@ def _stage_fingerprints(
             benchmark_origins=bench_origins,
         )
         for item in candidates
+    }
+
+
+def _profile_target_roles(
+    train: pd.DataFrame, profile: WeekendV2Profile
+) -> dict[str, Any]:
+    """Validate all stage target roles before search execution is possible."""
+    cfg = selected_forecasting_config()
+    stages: dict[str, Any] = {}
+    for name, development_count, benchmark_count in (
+        (
+            "screen",
+            profile.screen_development_origins,
+            profile.screen_benchmark_origins,
+        ),
+        (
+            "refine",
+            profile.refine_development_origins,
+            profile.refine_benchmark_origins,
+        ),
+        (
+            "confirmation",
+            profile.confirmation_development_origins,
+            profile.confirmation_benchmark_origins,
+        ),
+    ):
+        stages[name] = validate_target_roles(
+            development_origins=development_origins(development_count),
+            benchmark_origins=benchmark_origins(train, benchmark_count, cfg),
+            horizon=cfg.horizon,
+        )
+    return {
+        "schema_version": "search-target-role-validation-v1",
+        "profile": profile.name,
+        "stages": stages,
+        "content_sha256": artifact_fingerprint(
+            schema_version="search-target-role-validation-v1",
+            semantic=stages,
+        )["semantic_hash"],
     }
 
 
@@ -615,14 +655,7 @@ def _write_recommendation_with_provenance(
             "oof_output_fingerprints": member["oof_output_fingerprints"],
         })
 
-    required_pickles: dict[str, dict[str, Any]] = {}
     plan = recommendation["winner"]["plan"]
-    if plan["method"] in {"ridge_residual", "risk_gate", "specialist_gate"}:
-        relative = Path(plan["model_path"])
-        fingerprint = file_fingerprint(root / relative)
-        if fingerprint is None:
-            raise FileNotFoundError(root / relative)
-        required_pickles[relative.as_posix()] = fingerprint
 
     recommendation["provenance_manifest"] = "recommendation.provenance.json"
     recommendation_path = root / "recommendation.json"
@@ -642,9 +675,37 @@ def _write_recommendation_with_provenance(
         "member_bindings_sha256": config_hash(member_bindings),
         "winner_body_sha256": config_hash(recommendation["winner"]),
         "winner_plan_sha256": config_hash(plan),
-        "required_pickles": required_pickles,
+        "artifact_requirements": [],
     }
     write_json(root / recommendation["provenance_manifest"], provenance)
+
+
+def _set_recommendation_execution_contract(
+    recommendation: dict[str, Any], root: Path
+) -> None:
+    method = recommendation["winner"]["plan"]["method"]
+    if method in {
+        "control",
+        "global_convex",
+        "horizon_convex",
+        "product_convex",
+        "aggregate_reconciled",
+    }:
+        recommendation.update({
+            "status": "verified_declarative",
+            "execution_enabled": True,
+            "final_submission_command": (
+                "caffeinate -dimsu uv run python ml/run_weekend_v2_final.py "
+                f"--recommendation {root / 'recommendation.json'} "
+                f"--output-dir {root / 'final'} --device mps --resume-members"
+            ),
+        })
+        return
+    recommendation.pop("final_submission_command", None)
+    recommendation.update({
+        "status": "archived_untrusted_artifact",
+        "execution_enabled": False,
+    })
 
 
 def ensemble_stage(
@@ -822,12 +883,8 @@ def ensemble_stage(
         "selection_protocol": (
             "cross_fitted_development_only; benchmark_is_frozen_reporting_only"
         ),
-        "final_submission_command": (
-            "caffeinate -dimsu uv run python ml/run_weekend_v2_final.py "
-            f"--recommendation {root / 'recommendation.json'} "
-            f"--output-dir {root / 'final'} --device mps --resume-members"
-        ),
     }
+    _set_recommendation_execution_contract(recommendation, root)
     _write_recommendation_with_provenance(root, recommendation, results)
     write_json(root / "winner_plan.json", winner)
     write_csv(root / "ensemble_leaderboard.csv", [
@@ -876,6 +933,8 @@ def main() -> None:
     root.mkdir(parents=True, exist_ok=True)
     prior_root = Path(args.prior_root)
     profile = WEEKEND_V2_PROFILES[args.profile]
+    train, _ = load_raw(Config())
+    target_role_validation = _profile_target_roles(train, profile)
     candidates = generate_development_only_candidates(
         profile, seed=args.seed, prior_root=prior_root
     )
@@ -892,6 +951,7 @@ def main() -> None:
             "selection_use": "excluded",
         },
         "candidate_count": len(candidates),
+        "target_role_validation": target_role_validation,
         "train_file_hash": file_hash("data/train_data.parquet"),
         "environment": environment_metadata(requested_device=args.device),
         "artifact_fingerprint": artifact_fingerprint(
@@ -901,6 +961,7 @@ def main() -> None:
                 "seed": args.seed,
                 "device": args.device,
                 "candidates": candidates,
+                "target_role_validation": target_role_validation,
             },
             source_paths=WEEKEND_SEARCH_SOURCE_PATHS,
         ),
@@ -918,7 +979,6 @@ def main() -> None:
         print(json.dumps(load_json(root / "dry_run_plan.json"), indent=2))
         return
 
-    train, _ = load_raw(Config())
     screen_results: list[dict[str, Any]] = []
     if args.stage in {"all", "screen"}:
         screen_results = run_stage(
@@ -1042,12 +1102,15 @@ def main() -> None:
             "No completed confirmation results are available. Run --stage confirmation first or use --stage all."
         )
     recommendation = ensemble_stage(root, confirmation_results, profile, args.seed)
-    print(json.dumps({
+    summary = {
         "winner": recommendation["winner"]["name"],
         "promote_weekend_v2": recommendation["promote_weekend_v2"],
         "report": str(root / "FINAL_REPORT.md"),
-        "final_command": recommendation["final_submission_command"],
-    }, indent=2))
+        "execution_enabled": recommendation["execution_enabled"],
+    }
+    if recommendation["execution_enabled"]:
+        summary["final_command"] = recommendation["final_submission_command"]
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":

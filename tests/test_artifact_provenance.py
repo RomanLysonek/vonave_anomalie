@@ -19,7 +19,7 @@ from artifact_provenance import (
     result_body_manifest,
     validate_artifact_manifest,
 )
-from anomaly_search_common import summarize_oof
+from anomaly_search_common import summarize_oof, validate_target_roles
 
 
 def test_canonical_and_dataframe_hashes_are_content_sensitive() -> None:
@@ -89,32 +89,39 @@ def test_fingerprint_tracks_source_config_and_output_integrity(tmp_path) -> None
 def test_forecast_result_body_is_bound_and_recomputed_from_authenticated_oof(
     tmp_path,
 ) -> None:
-    origin = pd.Timestamp("2026-01-01")
-    oof = pd.DataFrame({
-        "ProductId": [1, 2],
-        "origin": [origin, origin],
-        "horizon": [1, 1],
-        "actual": [10.0, 20.0],
-        "pred_DynamicRidge": [9.0, 18.0],
-        "ProductAvailable": [True, True],
-    })
-    for split in ("development", "benchmark"):
-        oof.to_parquet(tmp_path / f"{split}_oof.parquet", index=False)
+    frames = {}
+    for split, origin in (
+        ("development", pd.Timestamp("2025-01-01")),
+        ("benchmark", pd.Timestamp("2026-01-01")),
+    ):
+        frames[split] = pd.DataFrame({
+            "ProductId": [1, 2],
+            "origin": [origin, origin],
+            "horizon": [1, 1],
+            "actual": [10.0, 20.0],
+            "pred_DynamicRidge": [9.0, 18.0],
+            "ProductAvailable": [True, True],
+        })
+        frames[split].to_parquet(tmp_path / f"{split}_oof.parquet", index=False)
     fingerprint = artifact_fingerprint(
         schema_version="forecast-test-v1",
         semantic={"candidate": "one"},
         source_paths=(),
     )
     payload = {
-        "schema_version": "anomaly-forecast-trial-v3",
+        "schema_version": "anomaly-forecast-trial-v4",
         "candidate": {"id": "one", "family": "control"},
         "model": "DynamicRidge",
         "epochs": 1,
         "seeds": [42],
-        "development_origins": ["2026-01-01"],
+        "development_origins": ["2025-01-01"],
         "benchmark_origins": ["2026-01-01"],
-        "development": summarize_oof(oof, "DynamicRidge"),
-        "benchmark": summarize_oof(oof, "DynamicRidge"),
+        "target_role_validation": validate_target_roles(
+            development_origins=["2025-01-01"],
+            benchmark_origins=["2026-01-01"],
+        ),
+        "development": summarize_oof(frames["development"], "DynamicRidge"),
+        "benchmark": summarize_oof(frames["benchmark"], "DynamicRidge"),
         "status": "complete",
     }
     payload["artifact_manifest"] = {
@@ -163,7 +170,7 @@ def test_diagnostic_result_without_canonical_body_digest_is_rejected(tmp_path) -
         "seeds": [42],
         "runs": [{"seed": 42}],
         "aggregate": {"diagnostic_objective": 1.0},
-        "diagnostic_boundary": {"schema_version": "development-diagnostic-boundary-v1"},
+        "diagnostic_boundary": {"schema_version": "development-diagnostic-boundary-v2"},
         "status": "complete",
         "artifact_manifest": {"fingerprint": fingerprint, "outputs": {}},
     }

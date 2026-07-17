@@ -12,7 +12,7 @@
     },
     {
       "path": "anomalies.js",
-      "sha256": "6fb89bc4b3ab18757a6a591c903d36db0ecec00a8611d56596beef94a8645c51",
+      "sha256": "0bc0e19421f433ea82e1a9574688e8910182e8b5d4f9bb0132670ca41fc63900",
       "size": 16750
     },
     {
@@ -27,8 +27,8 @@
     },
     {
       "path": "data/anomaly-dashboard-v2.json",
-      "sha256": "3765404cc539f017aabd1cc70411d134367c72110a7a3a4b9228f6f6dd4f9027",
-      "size": 545123
+      "sha256": "42eddac0875eb37eb317a4de6c2d12f8d671e30c3ba462cdebd24c8568c5ba75",
+      "size": 545241
     },
     {
       "path": "data/anomaly-products-v2/product-1.json",
@@ -182,7 +182,7 @@
     },
     {
       "path": "data/published_results_manifest.json",
-      "sha256": "b859c770980d7827da0f86cb783e0a5958818f8c3c57ed592b2a33b6c80d117f",
+      "sha256": "e6cf09b33af89416507ef024ab64cd729907b49e6c1f91f5adf1a5c7ac401f79",
       "size": 14477
     },
     {

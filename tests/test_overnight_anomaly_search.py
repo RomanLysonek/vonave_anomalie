@@ -14,6 +14,8 @@ from anomaly_search_common import (
     generate_autoencoder_candidates,
     generate_statistical_candidates,
     development_diagnostic_boundary,
+    target_dates_for_origins,
+    validate_target_roles,
     validate_development_diagnostic_boundary,
 )
 from pipeline import configure_anomaly_runtime, parse_args
@@ -26,9 +28,13 @@ from artifact_provenance import (
 from run_overnight_anomaly_search import (
     _diagnostic_cutoffs,
     _confirmation_recommendation,
+    _invalidate_legacy_execution_artifacts,
+    _profile_target_roles as overnight_profile_target_roles,
     _rank_forecast_results,
     _should_skip,
 )
+from run_weekend_v2_search import _profile_target_roles as weekend_profile_target_roles
+from weekend_v2_common import WEEKEND_V2_PROFILES
 
 
 def test_candidate_generation_is_deterministic_and_config_valid() -> None:
@@ -62,17 +68,40 @@ def test_autoencoder_action_variants_preserve_model_and_change_action() -> None:
     assert stripped[0] == stripped[1]
 
 
-def test_pipeline_can_load_winner_candidate_file(tmp_path) -> None:
-    candidate = generate_autoencoder_candidates(1, seed=9, epoch_cap=3)[0]
-    path = tmp_path / "winner.json"
-    path.write_text(json.dumps(candidate), encoding="utf-8")
+def test_pipeline_rejects_archived_overnight_recommendation(tmp_path) -> None:
+    path = tmp_path / "recommendation.json"
+    path.write_text(json.dumps({
+        "schema_version": "overnight-anomaly-search-v4",
+        "status": "archived",
+        "provenance_status": "unverified",
+        "execution_enabled": False,
+        "winner": generate_autoencoder_candidates(1, seed=9, epoch_cap=3)[0],
+    }), encoding="utf-8")
+    options = parse_args(["--anomaly-config", str(path)])
+    with pytest.raises(ValueError, match="manual-anomaly-config-v1"):
+        configure_anomaly_runtime(Config(), options)
+
+
+def test_pipeline_accepts_only_explicit_manual_anomaly_config(tmp_path) -> None:
+    path = tmp_path / "manual.json"
+    path.write_text(json.dumps({
+        "schema_version": "manual-anomaly-config-v1",
+        "config": {"anomaly_mode": "off"},
+    }), encoding="utf-8")
     options = parse_args(["--anomaly-config", str(path)])
     cfg = Config()
-    runtime = configure_anomaly_runtime(cfg, options)
-    assert runtime["source"] == str(path)
-    assert cfg.anomaly_source == "autoencoder"
-    assert cfg.anomaly_mode == "features"
-    assert cfg.autoencoder_max_epochs <= 3
+    configure_anomaly_runtime(cfg, options)
+    assert cfg.anomaly_mode == "off"
+
+
+def test_orchestrator_invalidates_legacy_execution_files_at_startup(tmp_path) -> None:
+    for name in ("recommendation.json", "winner_candidate.json"):
+        (tmp_path / name).write_text('{"execution_enabled": true}', encoding="utf-8")
+    _invalidate_legacy_execution_artifacts(tmp_path)
+    assert not (tmp_path / "recommendation.json").exists()
+    assert not (tmp_path / "winner_candidate.json").exists()
+    marker = json.loads((tmp_path / "execution_disabled.json").read_text())
+    assert marker["execution_enabled"] is False
 
 
 def test_profiles_include_smoke_and_overnight() -> None:
@@ -207,6 +236,96 @@ def test_diagnostic_boundary_precedes_frozen_benchmark_and_rejects_overlap() -> 
         )
 
 
+def test_target_role_boundaries_and_checked_data_february_overlap() -> None:
+    adjacent = validate_target_roles(
+        development_origins=["2025-02-01"],
+        benchmark_origins=["2025-02-08"],
+        frozen_final_origins=[],
+        horizon=7,
+    )
+    assert adjacent["roles"]["development"]["target_end"] == "2025-02-08"
+    assert adjacent["roles"]["benchmark"]["target_start"] == "2025-02-09"
+    assert len(adjacent["content_sha256"]) == 64
+    assert target_dates_for_origins(["2025-02-01"], 7)[-1] == pd.Timestamp(
+        "2025-02-08"
+    )
+
+    with pytest.raises(ValueError, match="development and benchmark"):
+        validate_target_roles(
+            development_origins=["2025-02-10"],
+            benchmark_origins=["2025-02-09"],
+            frozen_final_origins=[],
+            horizon=7,
+        )
+
+
+@pytest.mark.parametrize("horizon", [1, 2, 7, 14])
+def test_target_role_boundary_property_adjacent_ok_one_day_overlap_fails(
+    horizon: int,
+) -> None:
+    development = pd.Timestamp("2024-03-01")
+    adjacent_benchmark = development + pd.Timedelta(days=horizon)
+    validate_target_roles(
+        development_origins=[development],
+        benchmark_origins=[adjacent_benchmark],
+        frozen_final_origins=[],
+        horizon=horizon,
+    )
+    with pytest.raises(ValueError, match="Target-role overlap"):
+        validate_target_roles(
+            development_origins=[development],
+            benchmark_origins=[adjacent_benchmark - pd.Timedelta(days=1)],
+            frozen_final_origins=[],
+            horizon=horizon,
+        )
+    with pytest.raises(ValueError, match="development and calibration"):
+        validate_target_roles(
+            development_origins=[development],
+            calibration_origins=[development],
+            benchmark_origins=[],
+            frozen_final_origins=[],
+            horizon=horizon,
+        )
+
+
+def test_every_search_profile_is_prevalidated_and_overlap_is_rejected() -> None:
+    train = pd.DataFrame({
+        "DateKey": pd.date_range("2021-01-01", "2026-01-11", freq="D"),
+        "ProductId": 1,
+        "Quantity": 1.0,
+    })
+    for name, profile in PROFILES.items():
+        maximum = max(
+            profile.proxy_benchmark_origins,
+            profile.neural_benchmark_origins,
+            profile.confirmation_benchmark_origins,
+        )
+        boundary = development_diagnostic_boundary(
+            train,
+            pd.DatetimeIndex([
+                train["DateKey"].max() - pd.Timedelta(days=7 * (index + 1))
+                for index in range(maximum)
+            ]),
+        )
+        if name == "exhaustive":
+            with pytest.raises(ValueError, match="Target-role overlap"):
+                overnight_profile_target_roles(train, profile, boundary)
+        else:
+            validated = overnight_profile_target_roles(train, profile, boundary)
+            assert set(validated["stages"]) == {
+                "diagnostic", "proxy", "neural", "confirmation"
+            }
+    for name, profile in WEEKEND_V2_PROFILES.items():
+        if name == "exhaustive-v2":
+            with pytest.raises(ValueError, match="Target-role overlap"):
+                weekend_profile_target_roles(train, profile)
+        else:
+            validated = weekend_profile_target_roles(train, profile)
+            assert set(validated["stages"]) == {
+                "screen", "refine", "confirmation"
+            }
+
+
 def test_confirmation_acceptance_and_winner_ignore_benchmark(tmp_path, monkeypatch) -> None:
     monkeypatch.setitem(
         _confirmation_recommendation.__globals__,
@@ -250,3 +369,8 @@ def test_confirmation_acceptance_and_winner_ignore_benchmark(tmp_path, monkeypat
     after = _confirmation_recommendation(tmp_path, results)
     assert before["winner"] == after["winner"]
     assert before["comparisons"][0]["accepted"] == after["comparisons"][0]["accepted"]
+    assert before["status"] == "archived"
+    assert before["provenance_status"] == "unverified"
+    assert before["execution_enabled"] is False
+    assert "final_submission_command" not in before
+    assert not (tmp_path / "winner_candidate.json").exists()
