@@ -17,9 +17,9 @@ The original forecasting implementation and its detailed documentation are prese
 - The original autoencoder split flagged 64 windows but failed temporal calibration; after moving the training boundary later, only one calibration window and zero holdout windows were flagged. The current autoencoder is therefore a regime-drift diagnostic, not a validated forecast component.
 - The corrected test-context detector flagged 0 of 210 test rows at the 99th-percentile threshold.
 - Standalone anomaly policies did not beat the control.
-- The uploaded overnight result tree is not checked in, so its provenance remains unknown and it is not canonical site evidence.
-- The reported 1.47% preflight blend is non-nested, provenance-limited and uncertain; its 95% bootstrap confidence interval crosses zero.
-- Weekend-v2 was not run. Frozen final periods and the recent benchmark must not be reused for tuning.
+- Historical overnight, diagnostic, search, and preflight artifacts may contain benchmark-target contamination. Their scientific status is contaminated, provenance is unverified, and they are excluded from all current candidate/selection evidence.
+- The reported 1.47% preflight blend is retained for audit only and is not current evidence.
+- Weekend-v2 was not run. Legacy search artifacts must not seed it; frozen benchmark/final periods must not be reused for tuning.
 
 The checked-in audit is described in [`reports/REAL_DATA_TEST_RESULTS.md`](reports/REAL_DATA_TEST_RESULTS.md). Proposed search methodology is archived in [`reports/methodology/OVERNIGHT_ANOMALY_SEARCH.md`](reports/methodology/OVERNIGHT_ANOMALY_SEARCH.md).
 
@@ -32,7 +32,7 @@ GitHub Pages is the canonical deployment. The authored webapp reads the same gen
 - an honest unavailable state unless fingerprinted V2 evidence exists;
 - test-week context novelty using future-known covariates only;
 - excluded compact-autoencoder evidence with its reason and hashes;
-- the non-nested preflight limitation and the control recommendation.
+- the contaminated/unverified historical preflight exclusion and the control recommendation.
 
 ```bash
 uv run python ml/publish_site.py

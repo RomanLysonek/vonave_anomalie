@@ -7,13 +7,13 @@
     },
     {
       "path": "anomalies.html",
-      "sha256": "d9292d612a27f7b000ca95e6dd8ac55d8f7a1596a3e90b1d5ec8c65668bd3211",
-      "size": 6553
+      "sha256": "1c16800a5c6fc5f4d286f07de86bba9512529abbadd376d817a2230839083c36",
+      "size": 6571
     },
     {
       "path": "anomalies.js",
-      "sha256": "46ccf4c08bd3aae451aa0c01d4d45d5459b7ae9de1d125be9add061976d25f8a",
-      "size": 16879
+      "sha256": "6fb89bc4b3ab18757a6a591c903d36db0ecec00a8611d56596beef94a8645c51",
+      "size": 16750
     },
     {
       "path": "app.js",
@@ -27,8 +27,8 @@
     },
     {
       "path": "data/anomaly-dashboard-v2.json",
-      "sha256": "7ed53adad7948c209290679bc58a0c1b3f4fb9707f1be18a2c93926411404f3a",
-      "size": 544948
+      "sha256": "3765404cc539f017aabd1cc70411d134367c72110a7a3a4b9228f6f6dd4f9027",
+      "size": 545123
     },
     {
       "path": "data/anomaly-products-v2/product-1.json",
@@ -182,8 +182,8 @@
     },
     {
       "path": "data/published_results_manifest.json",
-      "sha256": "def0ad35cbb843b9d8646f79440fbb9ca8b0a6de24dfa7d6c7b402cafd196554",
-      "size": 14374
+      "sha256": "b859c770980d7827da0f86cb783e0a5958818f8c3c57ed592b2a33b6c80d117f",
+      "size": 14477
     },
     {
       "path": "data/results.json",

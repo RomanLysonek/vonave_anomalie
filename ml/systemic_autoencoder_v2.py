@@ -746,9 +746,11 @@ def config_from_framework(cfg: Any) -> AutoencoderV2Config:
     )
 
 
-AUTOENCODER_CACHE_SCHEMA_VERSION = "systemic-autoencoder-v2-cache-v3"
-_AUTOENCODER_CACHE_SOURCE_PATHS = (
-    Path(__file__).resolve().parent,
+AUTOENCODER_CACHE_SCHEMA_VERSION = "systemic-autoencoder-v2-cache-v4"
+AUTOENCODER_CACHE_SOURCE_PATHS = (
+    Path(__file__).resolve(),
+    Path(__file__).resolve().parent / "anomaly_detection.py",
+    Path(__file__).resolve().parent / "artifact_provenance.py",
 )
 
 
@@ -762,7 +764,7 @@ def _cache_fingerprint(
             "resolved_device": resolve_compute_device(ae_cfg.device),
         },
         dataframes={"raw_df": raw_df},
-        source_paths=_AUTOENCODER_CACHE_SOURCE_PATHS,
+        source_paths=AUTOENCODER_CACHE_SOURCE_PATHS,
     )
 
 
@@ -817,6 +819,12 @@ def build_cached_autoencoder_profile(
                     "Pass --confirm-recompute-stale to deliberately retrain it."
                 ) from exc
             print(f"[autoencoder cache] confirmed recompute of invalid {profile_path}: {exc}")
+
+    if not bool(getattr(cfg, "allow_autoencoder_cache_build", False)):
+        raise RuntimeError(
+            f"Autoencoder cache build is not authorized for missing/new cache {profile_path}. "
+            "Set allow_autoencoder_cache_build only from an explicit training/search entrypoint."
+        )
 
     profile, metadata, model, preprocessor = fit_score_systemic_autoencoder_v2(
         raw_df, ae_cfg

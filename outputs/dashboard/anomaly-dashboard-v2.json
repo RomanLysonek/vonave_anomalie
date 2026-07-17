@@ -17410,8 +17410,11 @@
   "generated_at_basis": "unavailable",
   "overnight": {
     "available": false,
-    "message": "No verifiable checked-in overnight result tree is available. Historical claims retain unknown provenance and are not canonical evidence.",
-    "state": "unavailable"
+    "message": "Historical overnight, diagnostic, and search artifacts may contain benchmark-target contamination and are excluded from current evidence.",
+    "provenance": "unverified",
+    "scientific_status": "contaminated",
+    "selection_use": "excluded",
+    "state": "contaminated"
   },
   "product_artifact_template": "anomaly-products-v2/product-{product_id}.json",
   "recommendation": {
@@ -17438,7 +17441,7 @@
     "snapshot_as_of": "2026-01-18",
     "version": "anomaly-dashboard-v2"
   },
-  "source_hash": "59a8f915d4070f94f7819876b97e52a88a0068ece2b33ca68adad0ec803fc0fa",
+  "source_hash": "5f25eeea91f1de964eec1ae859de6bd6548d5598f069d7866bae54f15f7994bb",
   "source_inputs": [
     {
       "path": "outputs/anomaly_audit_real/anomaly_metadata.json",
@@ -17474,21 +17477,20 @@
   "source_manifest_hash": "71a69b16bf097e8e4b816ebfd25c618afc3d5c4a879cc1e6d065d7d550c78311",
   "weekend_v2": {
     "available": false,
-    "message": "Weekend-v2 was not run; benchmark and frozen final periods were not reused for tuning.",
+    "message": "Weekend-v2 was not run. Legacy overnight/search inputs are contaminated, unverified, and excluded; control remains the recommendation.",
     "state": "not_run"
   },
   "weekend_v2_preflight": {
-    "benchmark_relative_improvement": 0.02409879590557134,
-    "bootstrap_ci_95": [
-      -0.0024220508359452278,
-      0.028461091895882366
-    ],
-    "bootstrap_probability_positive": 0.9574,
-    "confidence_interval_crosses_zero": true,
-    "development_relative_improvement": 0.014723412550079477,
-    "message": "The 1.47% development result is non-nested, provenance-limited motivation only. Its 95% bootstrap confidence interval crosses zero.",
-    "provenance": "limited",
-    "source": "uploaded overnight confirmation OOF",
-    "state": "non_nested_preflight"
+    "benchmark_relative_improvement": null,
+    "bootstrap_ci_95": null,
+    "bootstrap_probability_positive": null,
+    "confidence_interval_crosses_zero": null,
+    "development_relative_improvement": null,
+    "message": "Historical overnight/search OOF may contain benchmark-target contamination. The preflight is unverified and excluded from current candidate and selection evidence.",
+    "provenance": "unverified",
+    "scientific_status": "contaminated",
+    "selection_use": "excluded",
+    "source": "historical uploaded overnight confirmation OOF",
+    "state": "contaminated"
   }
 }

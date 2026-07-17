@@ -66,6 +66,7 @@ def main() -> None:
         cfg.seeds = tuple(int(token) for token in args.seeds.split(",") if token)
         cfg.autoencoder_device = args.device
         cfg.autoencoder_cache_dir = args.cache_dir
+        cfg.allow_autoencoder_cache_build = True
         cfg.confirm_recompute_stale = args.confirm_recompute_stale
         train, _ = load_raw(cfg)
         development_origins = _parse_origins(args.development_origins)

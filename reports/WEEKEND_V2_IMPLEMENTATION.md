@@ -1,5 +1,11 @@
 # Weekend-v2 implementation record
 
+> Historical validation and candidate-count claims below are contaminated/
+> unverified because their overnight inputs may contain benchmark-target
+> contamination. They are retained for implementation history only and are
+> excluded from current candidate/selection evidence. Weekend-v2 was not rerun;
+> control with `anomaly_mode=off` remains recommended.
+
 ## Added
 
 - `ml/weekend_v2_common.py`

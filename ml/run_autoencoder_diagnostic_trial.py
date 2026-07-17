@@ -17,7 +17,11 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-from anomaly_search_common import load_json, write_json
+from anomaly_search_common import (
+    load_json,
+    validate_development_diagnostic_boundary,
+    write_json,
+)
 from framework import Config, load_raw
 from systemic_autoencoder_v2 import AutoencoderV2Config, fit_score_systemic_autoencoder_v2
 from artifact_provenance import (
@@ -33,6 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--candidate", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--cutoffs", required=True, help="Comma-separated YYYY-MM-DD dates")
+    parser.add_argument("--diagnostic-boundary", required=True)
     parser.add_argument("--seeds", required=True, help="Comma-separated integer seeds")
     parser.add_argument("--device", choices=["auto", "mps", "cuda", "cpu"], default="auto")
     parser.add_argument("--save-scores", action="store_true")
@@ -246,13 +251,18 @@ def main() -> None:
     cutoffs = [pd.Timestamp(token) for token in args.cutoffs.split(",") if token]
     seeds = [int(token) for token in args.seeds.split(",") if token]
     train, _ = load_raw(Config())
+    boundary = load_json(Path(args.diagnostic_boundary))
+    development_source = validate_development_diagnostic_boundary(
+        train, boundary, cutoffs
+    )
     fingerprint = diagnostic_trial_fingerprint(
         candidate=candidate,
-        train_data=train,
+        train_data=development_source,
         cutoffs=cutoffs,
         seeds=seeds,
         device=args.device,
         save_scores=args.save_scores,
+        diagnostic_boundary=boundary,
     )
 
     run_metrics: list[dict] = []
@@ -260,13 +270,17 @@ def main() -> None:
     try:
         base = AutoencoderV2Config(**diagnostic)
         for cutoff in cutoffs:
-            history = train[train["DateKey"] <= cutoff].copy()
+            history = development_source[
+                pd.to_datetime(development_source["DateKey"]) <= cutoff
+            ].copy()
             if history.empty:
                 continue
             for seed in seeds:
                 cfg = replace(base, seed=seed, device=args.device)
                 scores, metadata, _, _ = fit_score_systemic_autoencoder_v2(history, cfg)
-                metrics = _run_metrics(scores, metadata, train, cfg.evt_alpha)
+                metrics = _run_metrics(
+                    scores, metadata, development_source, cfg.evt_alpha
+                )
                 metrics.update({"cutoff": str(cutoff.date()), "seed": seed})
                 run_metrics.append(metrics)
                 scores = scores.copy()
@@ -281,10 +295,11 @@ def main() -> None:
             raise RuntimeError("No diagnostic runs were executed")
         aggregate = _aggregate(run_metrics, score_frames)
         payload = {
-            "schema_version": "autoencoder-diagnostic-v3",
+            "schema_version": "autoencoder-diagnostic-v4",
             "candidate": candidate,
             "cutoffs": [str(value.date()) for value in cutoffs],
             "seeds": seeds,
+            "diagnostic_boundary": boundary,
             "runs": run_metrics,
             "aggregate": aggregate,
             "status": "complete",
@@ -308,9 +323,10 @@ def main() -> None:
         print(json.dumps(payload["aggregate"], indent=2))
     except Exception as exc:
         failure = {
-            "schema_version": "autoencoder-diagnostic-v3",
+            "schema_version": "autoencoder-diagnostic-v4",
             "candidate": candidate,
             "status": "failed",
+            "diagnostic_boundary": boundary,
             "fingerprint": fingerprint,
             "error": repr(exc),
             "traceback": traceback.format_exc(),

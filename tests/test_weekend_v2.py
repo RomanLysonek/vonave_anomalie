@@ -8,13 +8,24 @@ import pandas as pd
 import pytest
 
 from anomaly_detection import build_demand_anomaly_profile
-from anomaly_search_common import apply_candidate_config, selected_forecasting_config
-from artifact_provenance import config_hash, neural_training_identity
+from anomaly_search_common import (
+    apply_candidate_config,
+    selected_forecasting_config,
+    summarize_oof,
+)
+from artifact_provenance import (
+    artifact_fingerprint,
+    config_hash,
+    neural_training_identity,
+    output_fingerprints,
+    result_body_manifest,
+)
 from framework import Config
 from run_weekend_v2_final import (
     _load_resumable_member,
     _member_fingerprint,
     _save_member_cache,
+    _safe_relative_path,
     _validate_recommendation,
     active_members,
 )
@@ -31,9 +42,57 @@ from weekend_v2_common import (
     crossfit_plan,
     crossfit_specialist_gate,
     generate_weekend_v2_candidates,
+    save_pickle,
     search_convex_weights,
     wape,
 )
+
+
+def _authenticated_result(
+    root: Path, candidate: dict, *, prediction: float = 9.0
+) -> dict:
+    trial = root / "confirmation" / candidate["id"]
+    trial.mkdir(parents=True)
+    origin = pd.Timestamp("2026-01-01")
+    oof = pd.DataFrame({
+        "ProductId": [1],
+        "DateKey": [origin + pd.Timedelta(days=1)],
+        "origin": [origin],
+        "horizon": [1],
+        "actual": [10.0],
+        "pred_DynamicRidge": [prediction],
+        "ProductAvailable": [True],
+    })
+    for split in ("development", "benchmark"):
+        oof.to_parquet(trial / f"{split}_oof.parquet", index=False)
+    fingerprint = artifact_fingerprint(
+        schema_version="weekend-source-test-v1",
+        semantic={"candidate": candidate},
+        source_paths=(),
+    )
+    payload = {
+        "schema_version": "anomaly-forecast-trial-v3",
+        "candidate": candidate,
+        "model": "DynamicRidge",
+        "epochs": 1,
+        "seeds": [42],
+        "development_origins": ["2026-01-01"],
+        "benchmark_origins": ["2026-01-01"],
+        "development": summarize_oof(oof, "DynamicRidge"),
+        "benchmark": summarize_oof(oof, "DynamicRidge"),
+        "status": "complete",
+    }
+    payload["artifact_manifest"] = {
+        "fingerprint": fingerprint,
+        "outputs": output_fingerprints(
+            trial, ("development_oof.parquet", "benchmark_oof.parquet")
+        ),
+        "result_body": result_body_manifest(payload),
+    }
+    result_path = trial / "result.json"
+    result_path.write_text(json.dumps(payload), encoding="utf-8")
+    payload["_result_path"] = str(result_path)
+    return payload
 
 
 def _ensemble_frame() -> tuple[pd.DataFrame, list[str]]:
@@ -135,10 +194,23 @@ def test_candidate_generator_is_valid_and_keeps_anomaly_and_non_anomaly_experts(
     assert "control" in families
     assert "statistical" in families
     assert "regime" in families
+    assert "autoencoder" not in families
+    assert "hybrid" not in families
     for item in candidates:
         config = item["config"]
         if "anomaly_rolling_window" in config:
             assert config["anomaly_min_history"] <= config["anomaly_rolling_window"]
+    statistical = [item for item in candidates if item["family"] == "statistical"]
+    assert statistical
+    assert all(
+        item["config"]["anomaly_rolling_window"] == 180
+        for item in statistical
+    )
+    assert all(
+        item["config"]["anomaly_rolling_window"] != 90
+        for item in candidates
+        if item["family"] == "statistical"
+    )
 
 
 def test_anomaly_weight_policies_can_downweight_or_emphasize_hard_examples() -> None:
@@ -348,28 +420,26 @@ def test_recommendation_and_required_pickle_tampering_is_rejected(tmp_path) -> N
     )
     model_path = tmp_path / "ensemble" / "gate.pkl"
     model_path.parent.mkdir()
-    model_path.write_bytes(b"trusted-model")
+    member_column = "member__control"
+    save_pickle(model_path, {
+        "kind": "specialist_gate",
+        "members": [member_column, member_column],
+    })
     candidate = {"id": "control", "name": "control", "family": "control", "config": {}}
     recommendation = {
-        "schema_version": "weekend-v2-search-v3",
-        "members": [{"column": "member__control", "candidate": candidate}],
+        "schema_version": "weekend-v2-search-v4",
+        "members": [{"column": member_column, "candidate": candidate}],
         "winner": {
             "name": "gate",
             "plan": {
                 "method": "specialist_gate",
                 "model_path": "ensemble/gate.pkl",
-                "control_column": "member__control",
-                "specialist_column": "member__control",
+                "control_column": member_column,
+                "specialist_column": member_column,
             },
         },
     }
-    results = [{
-        "candidate": candidate,
-        "artifact_manifest": {
-            "fingerprint": {"trial": "one"},
-            "result_body": {"sha256": "body-digest"},
-        },
-    }]
+    results = [_authenticated_result(tmp_path, candidate)]
     _write_recommendation_with_provenance(tmp_path, recommendation, results)
     recommendation_path = tmp_path / "recommendation.json"
     loaded = json.loads(recommendation_path.read_text(encoding="utf-8"))
@@ -385,6 +455,53 @@ def test_recommendation_and_required_pickle_tampering_is_rejected(tmp_path) -> N
     model_path.write_bytes(b"tampered-model")
     with pytest.raises(RuntimeError, match="pickle hash mismatch"):
         _validate_recommendation(recommendation_path, loaded)
+
+
+def test_recommendation_source_missing_tampered_oof_and_traversal_are_rejected(
+    tmp_path,
+) -> None:
+    (tmp_path / "manifest.json").write_text(
+        json.dumps({"artifact_fingerprint": {"input": "bound"}}),
+        encoding="utf-8",
+    )
+    candidate = {"id": "control", "name": "control", "family": "control", "config": {}}
+    result = _authenticated_result(tmp_path, candidate)
+    recommendation = {
+        "schema_version": "weekend-v2-search-v4",
+        "reference_member": "member__control",
+        "members": [{"column": "member__control", "candidate": candidate}],
+        "winner": {
+            "name": "control",
+            "plan": {"method": "control", "member": "member__control"},
+        },
+    }
+    _write_recommendation_with_provenance(tmp_path, recommendation, [result])
+    recommendation_path = tmp_path / "recommendation.json"
+    loaded = json.loads(recommendation_path.read_text(encoding="utf-8"))
+    _validate_recommendation(recommendation_path, loaded)
+
+    source_path = Path(result["_result_path"])
+    source_bytes = source_path.read_bytes()
+    source_path.unlink()
+    with pytest.raises(RuntimeError, match="source result is invalid"):
+        _validate_recommendation(recommendation_path, loaded)
+    source_path.write_bytes(source_bytes)
+
+    oof_path = source_path.parent / "development_oof.parquet"
+    oof_bytes = oof_path.read_bytes()
+    oof_path.write_bytes(b"tampered")
+    with pytest.raises(RuntimeError, match="source result is invalid"):
+        _validate_recommendation(recommendation_path, loaded)
+    oof_path.write_bytes(oof_bytes)
+
+    payload = json.loads(source_path.read_text(encoding="utf-8"))
+    payload["development"]["global"]["WAPE"] = 999.0
+    source_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="source result is invalid"):
+        _validate_recommendation(recommendation_path, loaded)
+
+    with pytest.raises(RuntimeError, match="Unsafe provenance path"):
+        _safe_relative_path(tmp_path, "../outside/result.json")
 
 
 def test_legacy_recommendation_requires_future_provenance(tmp_path) -> None:

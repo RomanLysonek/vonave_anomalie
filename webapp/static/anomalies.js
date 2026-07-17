@@ -347,10 +347,9 @@ function renderEvidence(data) {
 
 function renderPreflight(data) {
   const preflight = data.weekend_v2_preflight || {};
-  const interval = preflight.bootstrap_ci_95 || [];
   document.getElementById("weekend-preflight-note").innerHTML = `
-    <strong>${percent(preflight.development_relative_improvement, 2, true)} development change · non-nested preflight</strong>
-    <span>${esc(preflight.message)} CI [${percent(interval[0], 2, true)}, ${percent(interval[1], 2, true)}]. Weekend-v2 was not run.</span>
+    <strong>Historical preflight · ${esc(preflight.state || "unavailable")}</strong>
+    <span>${esc(preflight.message)} Selection use: ${esc(preflight.selection_use || "excluded")}.</span>
   `;
 }
 

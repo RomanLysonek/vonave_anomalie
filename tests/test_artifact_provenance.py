@@ -157,12 +157,13 @@ def test_diagnostic_result_without_canonical_body_digest_is_rejected(tmp_path) -
         source_paths=(),
     )
     payload = {
-        "schema_version": "autoencoder-diagnostic-v3",
+        "schema_version": "autoencoder-diagnostic-v4",
         "candidate": {"id": "one"},
         "cutoffs": ["2026-01-01"],
         "seeds": [42],
         "runs": [{"seed": 42}],
         "aggregate": {"diagnostic_objective": 1.0},
+        "diagnostic_boundary": {"schema_version": "development-diagnostic-boundary-v1"},
         "status": "complete",
         "artifact_manifest": {"fingerprint": fingerprint, "outputs": {}},
     }

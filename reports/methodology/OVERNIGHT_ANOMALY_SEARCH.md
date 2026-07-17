@@ -1,5 +1,12 @@
 # Overnight anomaly search methodology
 
+> **Scientific status: contaminated; provenance status: unverified.** Historical
+> overnight, diagnostic, and search artifacts may include benchmark-target
+> observations in diagnostic cutoffs or next-seven-day difficulty targets. They
+> are retained only for audit, excluded from all current candidate/selection
+> evidence, and must not be resumed as valid evidence. The current recommendation
+> remains control with `anomaly_mode=off`.
+
 ## Purpose
 
 The earlier 40-epoch autoencoder run was a diagnostic, not a serious model-selection experiment. It trained one architecture, one representation, one temporal split and one threshold policy. Its negative result says only that **that configuration** was not stable enough to promote.
@@ -114,6 +121,13 @@ The randomized but deterministic search varies:
 
 ### Temporal validity
 
+New diagnostics persist a development-only boundary derived from the earliest
+frozen benchmark origin. The source partition ends one day before that origin;
+each diagnostic cutoff ends at least seven additional days earlier, so every
+input date and every next-seven-day difficulty target is strictly pre-benchmark.
+Boundary dates, partition identity, and partition content hash are fingerprinted,
+and overlap is rejected before fitting or scoring.
+
 Every run uses disjoint chronological partitions:
 
 ```text
@@ -152,6 +166,11 @@ outputs/overnight_anomaly_search/autoencoder_cache/
 ```
 
 The cache key includes the fold end date, data extent and complete autoencoder configuration. A later fold or different configuration cannot silently reuse stale scores.
+The source fingerprint is limited to the explicit transitive autoencoder
+training/scoring files, so publication-only edits do not invalidate it. A
+missing/new cache may be built only when an explicit training/search entrypoint
+sets `allow_autoencoder_cache_build`; stale or corrupt caches additionally
+require `--confirm-recompute-stale`.
 
 ## Stage 3: MPS NeuralNet screening
 

@@ -273,7 +273,7 @@ def verify_publication(
             raise RuntimeError(f"Published docs data parity mismatch: {relative}")
 
     published = _json_object(published_path)
-    if published.get("schema_version") != "published-results-v2":
+    if published.get("schema_version") != "published-results-v3":
         raise RuntimeError("Unexpected published-results manifest schema")
     for field in (
         "artifact_schema_version", "source_manifest_hash", "source_hash",

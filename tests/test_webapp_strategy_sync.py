@@ -378,7 +378,8 @@ def test_anomaly_page_has_version_banner_and_control_claims():
     assert "anomaly_mode=off" in html
     assert 'recommendation.policy || "unavailable"' in script
     assert 'recommendation.anomaly_mode || "unavailable"' in script
-    assert "Weekend-v2 was not run" in script
+    assert "Historical preflight" in script
+    assert 'preflight.selection_use || "excluded"' in script
 
 def test_model_comparison_uses_wide_seven_column_desktop_layout():
     styles = (STATIC / "styles.css").read_text()

@@ -7,12 +7,14 @@ import systemic_autoencoder_v2 as autoencoder_module
 
 from framework import Config, direct_panel_feature_names
 from systemic_autoencoder_v2 import (
+    AUTOENCODER_CACHE_SOURCE_PATHS,
     AUTOENCODER_ORIGIN_FEATURES,
     AutoencoderV2Config,
     apply_autoencoder_weights_to_panel,
     attach_autoencoder_origin_features,
     fit_score_systemic_autoencoder_v2,
     build_cached_autoencoder_profile,
+    _cache_fingerprint,
 )
 
 
@@ -140,6 +142,7 @@ def test_autoencoder_cache_validates_content_config_and_pickle_hash(
     raw = _synthetic_raw(days=3, products=1)
     cfg = Config()
     cfg.autoencoder_cache_dir = str(tmp_path)
+    cfg.allow_autoencoder_cache_build = True
     calls = []
 
     def fake_fit(frame, ae_cfg):
@@ -180,3 +183,43 @@ def test_autoencoder_cache_validates_content_config_and_pickle_hash(
     assert len(calls) == 4
     assert rebuilt_meta["cache_hit"] is False
     assert float(rebuilt["autoencoder_score"].iloc[0]) == 4.0
+
+
+def test_absent_autoencoder_cache_requires_explicit_build_authorization(
+    tmp_path, monkeypatch
+) -> None:
+    cfg = Config()
+    cfg.autoencoder_cache_dir = str(tmp_path)
+    called = False
+
+    def forbidden_fit(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("fit must not run")
+
+    monkeypatch.setattr(
+        autoencoder_module, "fit_score_systemic_autoencoder_v2", forbidden_fit
+    )
+    with pytest.raises(RuntimeError, match="cache build is not authorized"):
+        build_cached_autoencoder_profile(_synthetic_raw(days=3, products=1), cfg)
+    assert called is False
+
+
+def test_autoencoder_cache_fingerprint_excludes_publication_sources(
+    monkeypatch,
+) -> None:
+    captured = []
+
+    def fake_artifact_fingerprint(**kwargs):
+        captured.extend(kwargs["source_paths"])
+        return {"source_paths": [str(path) for path in kwargs["source_paths"]]}
+
+    monkeypatch.setattr(
+        autoencoder_module, "artifact_fingerprint", fake_artifact_fingerprint
+    )
+    _cache_fingerprint(
+        _synthetic_raw(days=3, products=1), AutoencoderV2Config(device="cpu")
+    )
+    assert tuple(captured) == AUTOENCODER_CACHE_SOURCE_PATHS
+    assert all(path.is_file() for path in AUTOENCODER_CACHE_SOURCE_PATHS)
+    assert not any("webapp" in path.parts or "docs" in path.parts for path in captured)

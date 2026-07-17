@@ -646,7 +646,6 @@ def build_anomaly_dashboard(root_dir: Path) -> dict[str, Any]:
     preflight = _read_json(root / "reports" / "weekend_v2_preflight.json")
     verified_ablation = _read_json(root / "outputs" / "real_data_test_summary.json")
     ablation_evidence, ablation_reason = _validate_weight_ablation(verified_ablation)
-    preflight_evidence, preflight_reason = _validate_preflight(preflight)
     records = _source_records(root, source_paths)
     source_manifest_hash = config_hash(records)
     generated_at, timestamp_basis, snapshot_as_of = _snapshot_timestamp(profile, context)
@@ -690,35 +689,22 @@ def build_anomaly_dashboard(root_dir: Path) -> dict[str, Any]:
             "reason": f"Weight-ablation evidence is unavailable: {ablation_reason}.",
         }
     )
-    preflight_payload = (
-        {
-            "state": "non_nested_preflight",
-            "provenance": "limited",
-            **preflight_evidence,
-            "message": (
-                f"The {preflight_evidence['development_relative_improvement']:.2%} "
-                "development result is non-nested, provenance-limited motivation only. "
-                "Its 95% bootstrap confidence interval "
-                + (
-                    "crosses zero."
-                    if preflight_evidence["confidence_interval_crosses_zero"]
-                    else "does not cross zero."
-                )
-            ),
-        }
-        if preflight_evidence is not None
-        else {
-            "state": "invalid",
-            "provenance": "unavailable",
-            "source": None,
-            "development_relative_improvement": None,
-            "benchmark_relative_improvement": None,
-            "bootstrap_probability_positive": None,
-            "bootstrap_ci_95": None,
-            "confidence_interval_crosses_zero": None,
-            "message": f"Preflight evidence is unavailable: {preflight_reason}.",
-        }
-    )
+    preflight_payload = {
+        "state": "contaminated",
+        "scientific_status": "contaminated",
+        "provenance": "unverified",
+        "selection_use": "excluded",
+        "source": "historical uploaded overnight confirmation OOF",
+        "development_relative_improvement": None,
+        "benchmark_relative_improvement": None,
+        "bootstrap_probability_positive": None,
+        "bootstrap_ci_95": None,
+        "confidence_interval_crosses_zero": None,
+        "message": (
+            "Historical overnight/search OOF may contain benchmark-target contamination. "
+            "The preflight is unverified and excluded from current candidate and selection evidence."
+        ),
+    }
 
     return _clean({
         "schema_version": SCHEMA_VERSION,
@@ -747,16 +733,22 @@ def build_anomaly_dashboard(root_dir: Path) -> dict[str, Any]:
         "excluded_evidence": excluded,
         "overnight": {
             "available": False,
-            "state": "unavailable",
+            "state": "contaminated",
+            "scientific_status": "contaminated",
+            "provenance": "unverified",
+            "selection_use": "excluded",
             "message": (
-                "No verifiable checked-in overnight result tree is available. "
-                "Historical claims retain unknown provenance and are not canonical evidence."
+                "Historical overnight, diagnostic, and search artifacts may contain "
+                "benchmark-target contamination and are excluded from current evidence."
             ),
         },
         "weekend_v2": {
             "available": False,
             "state": "not_run",
-            "message": "Weekend-v2 was not run; benchmark and frozen final periods were not reused for tuning.",
+            "message": (
+                "Weekend-v2 was not run. Legacy overnight/search inputs are contaminated, "
+                "unverified, and excluded; control remains the recommendation."
+            ),
         },
         "weekend_v2_preflight": preflight_payload,
         "product_artifact_template": "anomaly-products-v2/product-{product_id}.json",

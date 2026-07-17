@@ -692,6 +692,7 @@ def configure_anomaly_runtime(cfg: Config, options: RuntimeOptions) -> dict:
             name for name in Config.__dataclass_fields__
             if name.startswith("anomaly_") or name.startswith("autoencoder_")
         }
+        allowed.discard("allow_autoencoder_cache_build")
         unknown = set(candidate_config) - allowed
         if unknown:
             raise ValueError(
@@ -3195,6 +3196,8 @@ def main(argv=None) -> None:
     c34_runtime = configure_c34_runtime(cfg, options)
     c5_runtime = configure_c5_runtime(cfg, options)
     anomaly_runtime = configure_anomaly_runtime(cfg, options)
+    cfg.allow_autoencoder_cache_build = True
+    cfg.confirm_recompute_stale = options.confirm_recompute_stale
     nn_runtime = configure_nn_runtime(cfg, options)
     print(f"Device: {DEVICE}")
     print(f"Forecast strategy: {options.forecast_strategy.value}")

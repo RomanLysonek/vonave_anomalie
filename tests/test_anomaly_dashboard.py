@@ -43,8 +43,11 @@ def test_canonical_dashboard_is_deterministic_and_honest(tmp_path: Path) -> None
     assert first["research_status"]["truth_labels_available"] is False
     assert first["autoencoder_v2"]["available"] is False
     assert first["weekend_v2"]["state"] == "not_run"
-    assert first["weekend_v2_preflight"]["state"] == "non_nested_preflight"
-    assert first["weekend_v2_preflight"]["confidence_interval_crosses_zero"] is True
+    assert first["weekend_v2_preflight"]["state"] == "contaminated"
+    assert first["weekend_v2_preflight"]["provenance"] == "unverified"
+    assert first["weekend_v2_preflight"]["selection_use"] == "excluded"
+    assert first["weekend_v2_preflight"]["development_relative_improvement"] is None
+    assert first["overnight"]["scientific_status"] == "contaminated"
     assert len(first["excluded_evidence"]) == 2
     assert all(item["sha256"] for item in first["excluded_evidence"])
     assert first["audit"]["products"] == list(range(1, 31))
@@ -52,6 +55,10 @@ def test_canonical_dashboard_is_deterministic_and_honest(tmp_path: Path) -> None
     publish_anomaly_artifacts(ROOT, tmp_path)
     aggregate = json.loads((tmp_path / "anomaly-dashboard-v2.json").read_text())
     assert aggregate == first
+    checked_in = json.loads(
+        (ROOT / "docs" / "data" / "anomaly-dashboard-v2.json").read_text()
+    )
+    assert checked_in == first
     products = sorted((tmp_path / "anomaly-products-v2").glob("product-*.json"))
     assert len(products) == 30
 

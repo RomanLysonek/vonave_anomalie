@@ -24,11 +24,12 @@ from artifact_provenance import (
     neural_training_identity,
     resolve_compute_device,
     validate_artifact_manifest,
+    load_validated_result,
 )
 
 
-MEMBER_CACHE_SCHEMA_VERSION = "weekend-v2-final-member-v3"
-RECOMMENDATION_MANIFEST_SCHEMA_VERSION = "weekend-v2-recommendation-provenance-v1"
+MEMBER_CACHE_SCHEMA_VERSION = "weekend-v2-final-member-v4"
+RECOMMENDATION_MANIFEST_SCHEMA_VERSION = "weekend-v2-recommendation-provenance-v2"
 MEMBER_KEY_COLUMNS = ("ProductId", "DateKey")
 
 
@@ -197,9 +198,60 @@ def parse_args() -> argparse.Namespace:
 
 def _safe_relative_path(base: Path, raw: str) -> Path:
     relative = Path(raw)
-    if relative.is_absolute() or ".." in relative.parts:
+    if not raw or relative.is_absolute() or ".." in relative.parts:
         raise RuntimeError(f"Unsafe provenance path: {raw}")
-    return base / relative
+    resolved_base = base.resolve()
+    resolved = (resolved_base / relative).resolve()
+    try:
+        resolved.relative_to(resolved_base)
+    except ValueError as exc:
+        raise RuntimeError(f"Unsafe provenance path: {raw}") from exc
+    return resolved
+
+
+def _validate_plan_member_identity(recommendation: dict) -> None:
+    members = recommendation.get("members")
+    if not isinstance(members, list) or not members:
+        raise RuntimeError("Recommendation member list is missing")
+    columns: set[str] = set()
+    candidate_ids: set[str] = set()
+    for member in members:
+        candidate = member.get("candidate") if isinstance(member, dict) else None
+        column = member.get("column") if isinstance(member, dict) else None
+        candidate_id = candidate.get("id") if isinstance(candidate, dict) else None
+        if (
+            not isinstance(candidate_id, str)
+            or column != f"member__{candidate_id}"
+            or column in columns
+            or candidate_id in candidate_ids
+        ):
+            raise RuntimeError("Recommendation member/candidate identity mismatch")
+        columns.add(column)
+        candidate_ids.add(candidate_id)
+    try:
+        referenced = active_members(recommendation)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("Recommendation winner plan is invalid") from exc
+    if not referenced or not referenced.issubset(columns):
+        raise RuntimeError("Recommendation plan references unauthenticated members")
+    reference = recommendation.get("reference_member")
+    if reference is not None and reference not in columns:
+        raise RuntimeError("Recommendation reference member is unauthenticated")
+    plan = recommendation["winner"]["plan"]
+    method = plan["method"]
+    weight_sets: list[object] = []
+    if method in {"global_convex", "aggregate_reconciled"}:
+        weight_sets.append(plan.get("weights"))
+    elif method == "horizon_convex":
+        weight_sets.extend(
+            [plan.get("global_weights"), *list((plan.get("horizon_weights") or {}).values())]
+        )
+    elif method == "product_convex":
+        weight_sets.extend(
+            [plan.get("global_weights"), *list((plan.get("product_weights") or {}).values())]
+        )
+    if any(not isinstance(weights, dict) or set(weights) != columns for weights in weight_sets):
+        raise RuntimeError("Recommendation weights do not match authenticated members")
 
 
 def _validate_recommendation(
@@ -213,7 +265,7 @@ def _validate_recommendation(
             "Do not reuse it; a future search must deliberately produce and confirm "
             "a content-bound recommendation."
         )
-    if recommendation.get("schema_version") != "weekend-v2-search-v3":
+    if recommendation.get("schema_version") != "weekend-v2-search-v4":
         raise RuntimeError("Recommendation schema is unsupported or unverifiable")
     manifest_path = _safe_relative_path(recommendation_path.parent, manifest_name)
     if not manifest_path.exists():
@@ -243,8 +295,16 @@ def _validate_recommendation(
             "column": member["column"],
             "candidate_id": member["candidate"]["id"],
             "candidate_body_sha256": config_hash(member["candidate"]),
-            "result_body_sha256": member.get("result_body_sha256"),
-            "result_fingerprint_sha256": member.get("result_fingerprint_sha256"),
+            "source_result_path": member.get("source_result_path"),
+            "expected_result_fingerprint": member.get("expected_result_fingerprint"),
+            "canonical_result_body_digest": member.get(
+                "canonical_result_body_digest"
+            ),
+            "development_summary_sha256": member.get(
+                "development_summary_sha256"
+            ),
+            "benchmark_summary_sha256": member.get("benchmark_summary_sha256"),
+            "oof_output_fingerprints": member.get("oof_output_fingerprints"),
         }
         for member in recommendation.get("members", [])
     ]
@@ -253,6 +313,45 @@ def _validate_recommendation(
         or provenance.get("member_bindings_sha256") != config_hash(member_bindings)
     ):
         raise RuntimeError("Recommendation member identities/candidate bodies are not bound")
+    _validate_plan_member_identity(recommendation)
+    for member in recommendation["members"]:
+        candidate_id = member["candidate"]["id"]
+        expected_fingerprint = member.get("expected_result_fingerprint")
+        if not isinstance(expected_fingerprint, dict):
+            raise RuntimeError(f"Member {candidate_id} expected fingerprint is missing")
+        result_path = _safe_relative_path(
+            recommendation_path.parent, str(member.get("source_result_path", ""))
+        )
+        result, reason = load_validated_result(
+            result_path,
+            expected_fingerprint,
+            required_outputs=("development_oof.parquet", "benchmark_oof.parquet"),
+        )
+        if result is None:
+            raise RuntimeError(f"Member source result is invalid ({candidate_id}): {reason}")
+        result_manifest = result["artifact_manifest"]
+        if (
+            result.get("candidate") != member["candidate"]
+            or member.get("candidate_body_sha256") != config_hash(result["candidate"])
+            or member.get("canonical_result_body_digest")
+            != result_manifest.get("result_body")
+            or member.get("development_summary_sha256")
+            != config_hash(result.get("development"))
+            or member.get("benchmark_summary_sha256")
+            != config_hash(result.get("benchmark"))
+        ):
+            raise RuntimeError(f"Member source identity/body/summary mismatch: {candidate_id}")
+        expected_oof = member.get("oof_output_fingerprints")
+        actual_outputs = result_manifest.get("outputs", {})
+        if (
+            not isinstance(expected_oof, dict)
+            or expected_oof
+            != {
+                name: actual_outputs.get(name)
+                for name in ("development_oof.parquet", "benchmark_oof.parquet")
+            }
+        ):
+            raise RuntimeError(f"Member source OOF fingerprint mismatch: {candidate_id}")
     winner = recommendation.get("winner")
     if (
         not isinstance(winner, dict)
@@ -275,6 +374,21 @@ def _validate_recommendation(
         model_path = _safe_relative_path(recommendation_path.parent, raw_path)
         if file_fingerprint(model_path) != expected:
             raise RuntimeError(f"Required recommendation pickle hash mismatch: {raw_path}")
+        bundle = load_pickle(model_path)
+        all_columns = [member["column"] for member in recommendation["members"]]
+        if winner_plan["method"] == "specialist_gate":
+            expected_members = [
+                winner_plan["control_column"],
+                winner_plan["specialist_column"],
+            ]
+        else:
+            expected_members = all_columns
+        if (
+            not isinstance(bundle, dict)
+            or bundle.get("kind") != winner_plan["method"]
+            or bundle.get("members") != expected_members
+        ):
+            raise RuntimeError(f"Required recommendation pickle identity mismatch: {raw_path}")
     return provenance
 
 
@@ -389,6 +503,7 @@ def main() -> None:
             cfg.seeds = seeds
             cfg.autoencoder_device = args.device
             cfg.autoencoder_cache_dir = str(output / "autoencoder_cache")
+            cfg.allow_autoencoder_cache_build = True
             cfg.confirm_recompute_stale = args.confirm_recompute_stale
             cfg.output_dir = str(member_dir)
             _, predictions, diagnostics = run_final_forecast_direct(
@@ -434,9 +549,9 @@ def main() -> None:
     }:
         prediction = apply_weight_plan(frame, plan, member_columns)
     elif method in {"ridge_residual", "risk_gate", "specialist_gate"}:
-        model_path = Path(plan["model_path"])
-        if not model_path.is_absolute():
-            model_path = recommendation_path.parent / model_path
+        model_path = _safe_relative_path(
+            recommendation_path.parent, str(plan["model_path"])
+        )
         bundle = load_pickle(model_path)
         if method == "specialist_gate":
             prediction = apply_specialist_gate(frame, bundle)
@@ -455,7 +570,7 @@ def main() -> None:
     frame.to_csv(output / "final_member_forecasts.csv", index=False)
     frame.to_parquet(output / "final_member_forecasts.parquet", index=False)
     write_json(output / "run_metadata.json", {
-        "schema_version": "weekend-v2-final-v2",
+        "schema_version": "weekend-v2-final-v3",
         "recommendation": str(recommendation_path),
         "winner": winner,
         "trained_member_ids": trained,

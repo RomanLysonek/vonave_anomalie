@@ -4,8 +4,8 @@ The headline is deliberately conservative: there are no anomaly truth labels,
 known events are explanatory proxies, and this is not a validated anomaly
 detector. Standalone anomaly policies did not beat the control. The current
 recommendation is `anomaly_mode=off`; compact-autoencoder evidence is excluded,
-fingerprinted V2 is canonical, the 1.47% preflight is non-nested and uncertain,
-and weekend-v2 was not run.
+fingerprinted V2 is canonical, historical overnight/search/preflight evidence is
+contaminated and unverified, and weekend-v2 was not run.
 
 ## 90-second version
 

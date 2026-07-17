@@ -46,12 +46,14 @@ from anomaly_search_common import (
     benchmark_origins,
     bootstrap_origin_improvement,
     control_candidate,
+    development_diagnostic_boundary,
     development_origins,
     generate_autoencoder_candidates,
     generate_statistical_candidates,
     load_json,
     make_hybrid_candidate,
     selected_forecasting_config,
+    validate_development_diagnostic_boundary,
     write_json,
 )
 from framework import Config, load_raw
@@ -65,7 +67,7 @@ from artifact_provenance import (
 )
 
 
-SCHEMA_VERSION = "overnight-anomaly-search-v2"
+SCHEMA_VERSION = "overnight-anomaly-search-v3"
 
 
 def parse_args() -> argparse.Namespace:
@@ -140,8 +142,19 @@ def _preflight(device: str, output: Path) -> dict[str, Any]:
     return payload
 
 
-def _diagnostic_cutoffs(train: pd.DataFrame, count: int) -> pd.DatetimeIndex:
-    dates = pd.DatetimeIndex(sorted(pd.to_datetime(train["DateKey"]).unique()))
+def _diagnostic_cutoffs(
+    train: pd.DataFrame, count: int, boundary: dict[str, Any]
+) -> pd.DatetimeIndex:
+    input_end = pd.Timestamp(boundary["diagnostic_input_end"])
+    dates = pd.DatetimeIndex(
+        sorted(
+            pd.to_datetime(
+                train.loc[pd.to_datetime(train["DateKey"]) <= input_end, "DateKey"]
+            ).unique()
+        )
+    )
+    if dates.empty:
+        raise ValueError("No diagnostic cutoff is available before the boundary")
     earliest_position = min(len(dates) - 1, max(0, int(len(dates) * 0.68)))
     eligible = dates[earliest_position:]
     if count >= len(eligible):
@@ -282,15 +295,20 @@ def _diagnostic_fingerprints(
     cutoffs: pd.DatetimeIndex,
     seeds: tuple[int, ...],
     args: argparse.Namespace,
+    boundary: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
+    development_source = validate_development_diagnostic_boundary(
+        train, boundary, cutoffs
+    )
     return {
         item["id"]: diagnostic_trial_fingerprint(
             candidate=item,
-            train_data=train,
+            train_data=development_source,
             cutoffs=cutoffs,
             seeds=seeds,
             device=args.device,
             save_scores=args.save_diagnostic_scores,
+            diagnostic_boundary=boundary,
         )
         for item in candidates
     }
@@ -361,13 +379,14 @@ def _run_diagnostics(
     profile: SearchProfile,
     args: argparse.Namespace,
     started: float,
+    boundary: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    cutoffs = _diagnostic_cutoffs(train, profile.autoencoder_cutoffs)
+    cutoffs = _diagnostic_cutoffs(train, profile.autoencoder_cutoffs, boundary)
     cutoff_arg = ",".join(str(value.date()) for value in cutoffs)
     seed_arg = ",".join(str(value) for value in profile.autoencoder_seeds)
     stage_dir = root / "diagnostic"
     expected_by_id = _diagnostic_fingerprints(
-        candidates, train, cutoffs, profile.autoencoder_seeds, args
+        candidates, train, cutoffs, profile.autoencoder_seeds, args, boundary
     )
     required_outputs = (
         tuple(
@@ -399,6 +418,8 @@ def _run_diagnostics(
             str(trial_dir),
             "--cutoffs",
             cutoff_arg,
+            "--diagnostic-boundary",
+            str(root / "diagnostic_boundary.json"),
             "--seeds",
             seed_arg,
             "--device",
@@ -841,6 +862,18 @@ def main() -> None:
     profile = PROFILES[args.profile]
     preflight = _preflight(args.device, root)
     train, _ = load_raw(Config())
+    frozen_benchmark_count = max(
+        profile.proxy_benchmark_origins,
+        profile.neural_benchmark_origins,
+        profile.confirmation_benchmark_origins,
+    )
+    diagnostic_boundary = development_diagnostic_boundary(
+        train,
+        benchmark_origins(
+            train, frozen_benchmark_count, selected_forecasting_config()
+        ),
+    )
+    write_json(root / "diagnostic_boundary.json", diagnostic_boundary)
     ae_candidates = generate_autoencoder_candidates(
         profile.autoencoder_trials,
         seed=args.seed,
@@ -853,6 +886,7 @@ def main() -> None:
         "arguments": vars(args),
         "preflight": preflight,
         "autoencoder_candidates": ae_candidates,
+        "diagnostic_boundary": diagnostic_boundary,
         "environment": environment_metadata(
             requested_device=args.device,
             resolved_device=preflight["resolved_device"],
@@ -864,6 +898,7 @@ def main() -> None:
                 "seed": args.seed,
                 "device": args.device,
                 "autoencoder_candidates": ae_candidates,
+                "diagnostic_boundary": diagnostic_boundary,
             },
             dataframes={"train": train},
             source_paths=OVERNIGHT_SEARCH_SOURCE_PATHS,
@@ -874,13 +909,13 @@ def main() -> None:
     diagnostic_results: list[dict[str, Any]] = []
     if args.stage in {"all", "diagnostic"}:
         diagnostic_results = _run_diagnostics(
-            root, train, ae_candidates, profile, args, started
+            root, train, ae_candidates, profile, args, started, diagnostic_boundary
         )
         if args.stage == "diagnostic" or _time_budget_exhausted(started, args.max_hours):
             return
     else:
         diagnostic_cutoffs = _diagnostic_cutoffs(
-            train, profile.autoencoder_cutoffs
+            train, profile.autoencoder_cutoffs, diagnostic_boundary
         )
         diagnostic_results = _load_completed_results(
             root / "diagnostic",
@@ -890,6 +925,7 @@ def main() -> None:
                 diagnostic_cutoffs,
                 profile.autoencoder_seeds,
                 args,
+                diagnostic_boundary,
             ),
             required_outputs=(
                 tuple(

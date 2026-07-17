@@ -1,5 +1,10 @@
 # Overnight anomaly experiment implementation
 
+> Historical overnight/diagnostic/search outputs are scientifically
+> contaminated and provenance-unverified because benchmark targets may have
+> entered diagnostic inputs or next-week targets. They are audit-only and
+> excluded from current evidence. No rerun was performed.
+
 ## Correction to the earlier test
 
 The quick sandbox run tested one compact autoencoder and one lightweight anomaly-weighting policy. It was useful as a falsification check but too narrow to answer whether a carefully tuned anomaly representation can help the final NeuralNet.

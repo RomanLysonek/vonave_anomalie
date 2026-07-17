@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 
-PROVENANCE_SCHEMA_VERSION = "artifact-provenance-v3"
+PROVENANCE_SCHEMA_VERSION = "artifact-provenance-v4"
 RESULT_BODY_SCHEMA_VERSION = "canonical-result-body-v1"
 
 ML_ROOT = Path(__file__).resolve().parent
@@ -457,6 +457,7 @@ def diagnostic_trial_fingerprint(
     seeds: Iterable[int],
     device: str,
     save_scores: bool,
+    diagnostic_boundary: Mapping[str, Any],
 ) -> dict[str, Any]:
     semantic = {
         "candidate": candidate,
@@ -465,9 +466,10 @@ def diagnostic_trial_fingerprint(
         "requested_device": device,
         "resolved_device": resolve_compute_device(device),
         "save_scores": bool(save_scores),
+        "diagnostic_boundary": diagnostic_boundary,
     }
     return artifact_fingerprint(
-        schema_version="autoencoder-diagnostic-v3",
+        schema_version="autoencoder-diagnostic-v4",
         semantic=semantic,
         dataframes={"train": train_data},
         source_paths=DIAGNOSTIC_TRIAL_SOURCE_PATHS,
@@ -486,9 +488,9 @@ def _validate_result_body(
             "development_origins", "benchmark_origins", "development",
             "benchmark", "status",
         },
-        "autoencoder-diagnostic-v3": {
+        "autoencoder-diagnostic-v4": {
             "schema_version", "candidate", "cutoffs", "seeds", "runs",
-            "aggregate", "status",
+            "aggregate", "status", "diagnostic_boundary",
         },
     }
     required = required_by_schema.get(schema)

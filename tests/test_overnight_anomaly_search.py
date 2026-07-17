@@ -9,9 +9,12 @@ import pytest
 from anomaly_search_common import (
     CONFIG_FIELDS,
     PROFILES,
+    apply_candidate_config,
     autoencoder_action_variants,
     generate_autoencoder_candidates,
     generate_statistical_candidates,
+    development_diagnostic_boundary,
+    validate_development_diagnostic_boundary,
 )
 from pipeline import configure_anomaly_runtime, parse_args
 from framework import Config
@@ -21,6 +24,7 @@ from artifact_provenance import (
     result_body_manifest,
 )
 from run_overnight_anomaly_search import (
+    _diagnostic_cutoffs,
     _confirmation_recommendation,
     _rank_forecast_results,
     _should_skip,
@@ -39,6 +43,11 @@ def test_candidate_generation_is_deterministic_and_config_valid() -> None:
     statistical = generate_statistical_candidates(5, seed=456)
     assert len({item["id"] for item in statistical}) == 5
     assert all(set(item["config"]) <= CONFIG_FIELDS for item in statistical)
+    with pytest.raises(ValueError, match="unknown Config field"):
+        apply_candidate_config(
+            Config(),
+            {"config": {"allow_autoencoder_cache_build": True}},
+        )
 
 
 def test_autoencoder_action_variants_preserve_model_and_change_action() -> None:
@@ -84,13 +93,14 @@ def test_orchestrator_only_skips_valid_fingerprinted_result(tmp_path) -> None:
         source_paths=(),
     )
     payload = {
-        "schema_version": "autoencoder-diagnostic-v3",
+        "schema_version": "autoencoder-diagnostic-v4",
         "candidate": {"id": "one"},
         "cutoffs": ["2026-01-01"],
         "seeds": [42],
         "runs": [{"seed": 42}],
         "aggregate": {"diagnostic_objective": 1.0},
         "status": "complete",
+        "diagnostic_boundary": {"schema_version": "test"},
     }
     payload["artifact_manifest"] = {
         "fingerprint": expected,
@@ -172,6 +182,29 @@ def test_forecast_ranking_is_invariant_to_frozen_benchmark() -> None:
     assert [row["candidate_id"] for row in _rank_forecast_results(results)] == [
         "a", "b", "control"
     ]
+
+
+def test_diagnostic_boundary_precedes_frozen_benchmark_and_rejects_overlap() -> None:
+    dates = pd.date_range("2025-01-01", periods=100, freq="D")
+    train = pd.DataFrame({
+        "DateKey": dates,
+        "ProductId": 1,
+        "Quantity": 1.0,
+    })
+    boundary = development_diagnostic_boundary(
+        train, pd.to_datetime(["2025-03-20", "2025-03-27"])
+    )
+    cutoffs = _diagnostic_cutoffs(train, 3, boundary)
+    source = validate_development_diagnostic_boundary(train, boundary, cutoffs)
+    assert pd.Timestamp(source["DateKey"].max()) == pd.Timestamp("2025-03-19")
+    assert cutoffs.max() + pd.Timedelta(days=7) < pd.Timestamp("2025-03-20")
+    assert boundary["source_partition"] == "train_data_development_only"
+    assert len(boundary["source_content_sha256"]) == 64
+
+    with pytest.raises(ValueError, match="overlaps"):
+        validate_development_diagnostic_boundary(
+            train, boundary, [pd.Timestamp("2025-03-13")]
+        )
 
 
 def test_confirmation_acceptance_and_winner_ignore_benchmark(tmp_path, monkeypatch) -> None:

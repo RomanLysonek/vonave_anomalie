@@ -12,6 +12,9 @@ The anomaly research extension does not alter this baseline recommendation:
 the current published policy is the control with `anomaly_mode=off`. No anomaly
 truth labels exist, known events are explanatory proxies, and standalone
 anomaly policies did not beat the control.
+Historical overnight/diagnostic/search artifacts may contain benchmark-target
+contamination and are unverified; they are excluded from current candidate and
+selection evidence.
 
 ## Approach
 

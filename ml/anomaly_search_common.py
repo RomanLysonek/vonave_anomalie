@@ -11,6 +11,7 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
+from artifact_provenance import dataframe_content_hash
 from framework import Config, compute_metrics
 from pipeline import DEVELOPMENT_ORIGINS, recent_benchmark_origins
 from systemic_autoencoder_v2 import AutoencoderV2Config
@@ -127,7 +128,86 @@ PROFILES: dict[str, SearchProfile] = {
 }
 
 
-CONFIG_FIELDS = set(Config.__dataclass_fields__)
+EXECUTION_ONLY_CONFIG_FIELDS = {
+    "allow_autoencoder_cache_build",
+    "confirm_recompute_stale",
+}
+CONFIG_FIELDS = set(Config.__dataclass_fields__) - EXECUTION_ONLY_CONFIG_FIELDS
+
+DIAGNOSTIC_BOUNDARY_SCHEMA_VERSION = "development-diagnostic-boundary-v1"
+
+
+def development_diagnostic_boundary(
+    train: pd.DataFrame,
+    frozen_benchmark_origins: Iterable[Any],
+    *,
+    horizon: int = 7,
+) -> dict[str, Any]:
+    """Bind diagnostics to data ending before the earliest frozen benchmark."""
+    origins = pd.DatetimeIndex(pd.to_datetime(list(frozen_benchmark_origins)))
+    if origins.empty:
+        raise ValueError("At least one frozen benchmark origin is required")
+    earliest_origin = pd.Timestamp(origins.min()).normalize()
+    target_end = earliest_origin - pd.Timedelta(days=1)
+    input_end = target_end - pd.Timedelta(days=int(horizon))
+    dates = pd.to_datetime(train["DateKey"], errors="raise")
+    source = train.loc[dates <= target_end].copy()
+    if source.empty:
+        raise ValueError("Development diagnostic source partition is empty")
+    return {
+        "schema_version": DIAGNOSTIC_BOUNDARY_SCHEMA_VERSION,
+        "source_partition": "train_data_development_only",
+        "source_start": str(pd.Timestamp(source["DateKey"].min()).date()),
+        "source_end": str(pd.Timestamp(source["DateKey"].max()).date()),
+        "source_content_sha256": dataframe_content_hash(source),
+        "diagnostic_input_end": str(input_end.date()),
+        "difficulty_target_end": str(target_end.date()),
+        "earliest_frozen_benchmark_origin": str(earliest_origin.date()),
+        "earliest_frozen_benchmark_target": str(
+            (earliest_origin + pd.Timedelta(days=1)).date()
+        ),
+        "horizon_days": int(horizon),
+    }
+
+
+def validate_development_diagnostic_boundary(
+    train: pd.DataFrame,
+    boundary: dict[str, Any],
+    cutoffs: Iterable[Any],
+) -> pd.DataFrame:
+    """Validate a persisted boundary before any diagnostic computation."""
+    if boundary.get("schema_version") != DIAGNOSTIC_BOUNDARY_SCHEMA_VERSION:
+        raise ValueError("Unsupported diagnostic boundary schema")
+    horizon = int(boundary.get("horizon_days", 0))
+    if horizon <= 0:
+        raise ValueError("Diagnostic boundary horizon must be positive")
+    earliest = pd.Timestamp(boundary["earliest_frozen_benchmark_origin"]).normalize()
+    target_end = pd.Timestamp(boundary["difficulty_target_end"]).normalize()
+    input_end = pd.Timestamp(boundary["diagnostic_input_end"]).normalize()
+    if not (
+        target_end < earliest
+        and input_end + pd.Timedelta(days=horizon) <= target_end
+        and pd.Timestamp(boundary["earliest_frozen_benchmark_target"]) > earliest
+    ):
+        raise ValueError("Diagnostic boundary overlaps the frozen benchmark window")
+    cutoff_index = pd.DatetimeIndex(pd.to_datetime(list(cutoffs)))
+    if cutoff_index.empty or cutoff_index.max().normalize() > input_end:
+        raise ValueError("Diagnostic cutoff/window overlaps the frozen benchmark boundary")
+    dates = pd.to_datetime(train["DateKey"], errors="raise")
+    source = train.loc[dates <= target_end].copy()
+    if source.empty:
+        raise ValueError("Development diagnostic source partition is empty")
+    expected = {
+        "source_partition": "train_data_development_only",
+        "source_start": str(pd.Timestamp(source["DateKey"].min()).date()),
+        "source_end": str(pd.Timestamp(source["DateKey"].max()).date()),
+        "source_content_sha256": dataframe_content_hash(source),
+    }
+    if any(boundary.get(key) != value for key, value in expected.items()):
+        raise ValueError("Diagnostic source partition fingerprint mismatch")
+    if pd.Timestamp(source["DateKey"].max()).normalize() >= earliest:
+        raise ValueError("Diagnostic source partition overlaps the frozen benchmark")
+    return source
 
 
 def _python_value(value: Any) -> Any:

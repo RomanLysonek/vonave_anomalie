@@ -33,7 +33,7 @@ from webapp.anomaly_dashboard import publish_anomaly_artifacts  # noqa: E402
 
 SITE_SCHEMA_VERSION = "static-dashboard-site-v2"
 DASHBOARD_MANIFEST_SCHEMA = "dashboard-publication-v2"
-PUBLISHED_RESULTS_SCHEMA = "published-results-v2"
+PUBLISHED_RESULTS_SCHEMA = "published-results-v3"
 LEGACY_GENERATED_FILES = {
     ".nojekyll",
     "README.md",
@@ -294,8 +294,8 @@ def _published_manifest(
         "environment": captured_environment,
         "provenance_limitations": [
             "No anomaly truth labels exist.",
-            "Uploaded overnight source artifacts are unavailable; their provenance remains unknown.",
-            "The weekend-v2 preflight is non-nested and its confidence interval crosses zero.",
+            "Historical overnight, diagnostic, and search artifacts may contain benchmark-target contamination; scientific status is contaminated and provenance is unverified.",
+            "Legacy overnight/search/preflight artifacts are excluded from all current candidate and selection evidence.",
         ],
     }
 

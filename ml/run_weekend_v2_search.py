@@ -62,8 +62,8 @@ from artifact_provenance import (
     WEEKEND_SEARCH_SOURCE_PATHS,
 )
 
-SCHEMA_VERSION = "weekend-v2-search-v3"
-RECOMMENDATION_MANIFEST_SCHEMA_VERSION = "weekend-v2-recommendation-provenance-v1"
+SCHEMA_VERSION = "weekend-v2-search-v4"
+RECOMMENDATION_MANIFEST_SCHEMA_VERSION = "weekend-v2-recommendation-provenance-v2"
 
 
 def parse_args() -> argparse.Namespace:
@@ -577,14 +577,42 @@ def _write_recommendation_with_provenance(
         candidate_id = member["candidate"]["id"]
         result = result_by_id[candidate_id]
         result_manifest = result["artifact_manifest"]
-        member["result_body_sha256"] = result_manifest["result_body"]["sha256"]
-        member["result_fingerprint_sha256"] = config_hash(result_manifest["fingerprint"])
+        raw_result_path = result.get("_result_path")
+        if not isinstance(raw_result_path, str):
+            raise RuntimeError(f"Result path is unavailable for member {candidate_id}")
+        result_path = Path(raw_result_path).resolve()
+        try:
+            relative_result_path = result_path.relative_to(root.resolve())
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Member result must stay below the recommendation root: {raw_result_path}"
+            ) from exc
+        outputs = result_manifest.get("outputs")
+        required_oof = {
+            name: outputs.get(name) if isinstance(outputs, dict) else None
+            for name in ("development_oof.parquet", "benchmark_oof.parquet")
+        }
+        if any(value is None for value in required_oof.values()):
+            raise RuntimeError(f"Member {candidate_id} lacks authenticated OOF outputs")
+        member.update({
+            "source_result_path": relative_result_path.as_posix(),
+            "expected_result_fingerprint": result_manifest["fingerprint"],
+            "canonical_result_body_digest": result_manifest["result_body"],
+            "candidate_body_sha256": config_hash(member["candidate"]),
+            "development_summary_sha256": config_hash(result["development"]),
+            "benchmark_summary_sha256": config_hash(result["benchmark"]),
+            "oof_output_fingerprints": required_oof,
+        })
         member_bindings.append({
             "column": member["column"],
             "candidate_id": candidate_id,
             "candidate_body_sha256": config_hash(member["candidate"]),
-            "result_body_sha256": member["result_body_sha256"],
-            "result_fingerprint_sha256": member["result_fingerprint_sha256"],
+            "source_result_path": member["source_result_path"],
+            "expected_result_fingerprint": member["expected_result_fingerprint"],
+            "canonical_result_body_digest": member["canonical_result_body_digest"],
+            "development_summary_sha256": member["development_summary_sha256"],
+            "benchmark_summary_sha256": member["benchmark_summary_sha256"],
+            "oof_output_fingerprints": member["oof_output_fingerprints"],
         })
 
     required_pickles: dict[str, dict[str, Any]] = {}
@@ -858,6 +886,11 @@ def main() -> None:
         "profile": profile.__dict__,
         "arguments": vars(args),
         "prior_root": str(prior_root),
+        "legacy_prior_evidence": {
+            "scientific_status": "contaminated",
+            "provenance_status": "unverified",
+            "selection_use": "excluded",
+        },
         "candidate_count": len(candidates),
         "train_file_hash": file_hash("data/train_data.parquet"),
         "environment": environment_metadata(requested_device=args.device),

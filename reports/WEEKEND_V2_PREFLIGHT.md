@@ -1,4 +1,8 @@
-# Weekend-v2 non-nested, provenance-limited preflight
+# Weekend-v2 historical preflight — contaminated/unverified
+
+> This artifact may contain benchmark-target contamination. It is excluded from
+> all current candidate generation, model selection, and recommendation evidence.
+> It was not rerun. Control with `anomaly_mode=off` remains recommended.
 
 ## Source
 
