@@ -2,14 +2,22 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pickle
+from pathlib import Path
+import pytest
+import systemic_autoencoder_v2 as autoencoder_module
 
 from framework import Config, direct_panel_feature_names
 from systemic_autoencoder_v2 import (
+    AUTOENCODER_CACHE_SOURCE_PATHS,
     AUTOENCODER_ORIGIN_FEATURES,
     AutoencoderV2Config,
     apply_autoencoder_weights_to_panel,
     attach_autoencoder_origin_features,
     fit_score_systemic_autoencoder_v2,
+    build_cached_autoencoder_profile,
+    _cache_fingerprint,
+    _cache_key,
 )
 
 
@@ -129,3 +137,112 @@ def test_autoencoder_feature_schema_is_source_aware() -> None:
     hybrid = direct_panel_feature_names(cfg)
     assert all(column in hybrid for column in AUTOENCODER_ORIGIN_FEATURES)
     assert "anomaly_score_lag0" in hybrid
+
+
+def test_autoencoder_cache_validates_content_config_and_pickle_hash(
+    tmp_path, monkeypatch
+) -> None:
+    raw = _synthetic_raw(days=3, products=1)
+    cfg = Config()
+    cfg.autoencoder_cache_dir = str(tmp_path)
+    cfg.allow_autoencoder_cache_build = True
+    calls = []
+
+    def fake_fit(frame, ae_cfg):
+        calls.append((float(frame["Quantity"].sum()), ae_cfg.window))
+        profile = pd.DataFrame({
+            "DateKey": pd.to_datetime(frame["DateKey"]).drop_duplicates(),
+            "autoencoder_score": float(len(calls)),
+        })
+        return profile, {"best_epoch": 1}, object(), object()
+
+    monkeypatch.setattr(
+        autoencoder_module, "fit_score_systemic_autoencoder_v2", fake_fit
+    )
+    first, first_meta = build_cached_autoencoder_profile(raw, cfg)
+    reused, reused_meta = build_cached_autoencoder_profile(raw.copy(), cfg)
+    assert len(calls) == 1
+    assert first_meta["cache_hit"] is False
+    assert reused_meta["cache_hit"] is True
+    pd.testing.assert_frame_equal(first, reused)
+
+    changed = raw.copy()
+    changed.loc[0, "Quantity"] += 1.0
+    build_cached_autoencoder_profile(changed, cfg)
+    assert len(calls) == 2
+
+    cfg.autoencoder_window += 1
+    build_cached_autoencoder_profile(raw, cfg)
+    assert len(calls) == 3
+
+    cfg.autoencoder_window -= 1
+    original_profile = tmp_path / f"{first_meta['cache_key']}.parquet"
+    original_profile.write_bytes(b"corrupt")
+    with pytest.raises(RuntimeError, match="confirm-recompute-stale"):
+        build_cached_autoencoder_profile(raw, cfg)
+    assert len(calls) == 3
+    cfg.confirm_recompute_stale = True
+    rebuilt, rebuilt_meta = build_cached_autoencoder_profile(raw, cfg)
+    assert len(calls) == 4
+    assert rebuilt_meta["cache_hit"] is False
+    assert float(rebuilt["autoencoder_score"].iloc[0]) == 4.0
+
+
+def test_absent_autoencoder_cache_requires_explicit_build_authorization(
+    tmp_path, monkeypatch
+) -> None:
+    cfg = Config()
+    cfg.autoencoder_cache_dir = str(tmp_path)
+    called = False
+
+    def forbidden_fit(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("fit must not run")
+
+    monkeypatch.setattr(
+        autoencoder_module, "fit_score_systemic_autoencoder_v2", forbidden_fit
+    )
+    with pytest.raises(RuntimeError, match="cache build is not authorized"):
+        build_cached_autoencoder_profile(_synthetic_raw(days=3, products=1), cfg)
+    assert called is False
+
+
+def test_autoencoder_cache_fingerprint_excludes_publication_sources(
+    monkeypatch,
+) -> None:
+    captured = []
+
+    def fake_artifact_fingerprint(**kwargs):
+        captured.extend(kwargs["source_paths"])
+        return {"source_paths": [str(path) for path in kwargs["source_paths"]]}
+
+    monkeypatch.setattr(
+        autoencoder_module, "artifact_fingerprint", fake_artifact_fingerprint
+    )
+    _cache_fingerprint(
+        _synthetic_raw(days=3, products=1), AutoencoderV2Config(device="cpu")
+    )
+    assert tuple(captured) == AUTOENCODER_CACHE_SOURCE_PATHS
+    assert all(path.is_file() for path in AUTOENCODER_CACHE_SOURCE_PATHS)
+    assert not any("webapp" in path.parts or "docs" in path.parts for path in captured)
+
+
+def test_legacy_pickle_cache_cannot_execute(tmp_path) -> None:
+    marker = tmp_path / "executed"
+
+    class Malicious:
+        def __reduce__(self):
+            return (Path.write_text, (marker, "executed"))
+
+    raw = _synthetic_raw(days=3, products=1)
+    cfg = Config(autoencoder_cache_dir=str(tmp_path))
+    key = _cache_key(raw, autoencoder_module.config_from_framework(cfg))
+    (tmp_path / f"{key}.pkl").write_bytes(pickle.dumps(Malicious()))
+
+    with pytest.raises(RuntimeError, match="cache build is not authorized"):
+        build_cached_autoencoder_profile(raw, cfg)
+    assert not marker.exists()
+    assert "read_pickle" not in Path(
+        autoencoder_module.__file__
+    ).read_text(encoding="utf-8")

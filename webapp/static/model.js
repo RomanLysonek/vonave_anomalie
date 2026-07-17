@@ -8,7 +8,7 @@ function currentSlug() {
 const KIND_LABEL = { primary: "Submission", ensemble: "OOF Ensemble", baseline: "Baseline", naive: "Naive" };
 
 function renderHero(model) {
-  document.title = `${model.key === "NeuralNet" ? "Control NeuralNet" : model.label} — Voňavé Anomálie`;
+  document.title = `${model.key === "NeuralNet" ? "Control NeuralNet" : model.label} — Anomaly Research`;
   const hero = document.getElementById("model-hero");
   document.documentElement.style.setProperty("--mc", model.color);
   hero.style.setProperty("--mc", model.color);
@@ -346,7 +346,7 @@ function renderFoldTable(data, model, strategy, regime) {
       <td>${row.fold}</td>
       <td>${fmt(row.MAE)}</td>
       <td>${fmt(row.RMSE)}</td>
-      <td style="color:${Number(row.Bias) >= 0 ? "var(--bad)" : "var(--good)"}">${fmt(row.Bias)}</td>
+      <td class="bias-neutral">${fmt(row.Bias)}</td>
       <td>${pct(row.BiasRatio)}</td>
       <td>${row.n ?? row.n_scored ?? "—"}</td>
     </tr>

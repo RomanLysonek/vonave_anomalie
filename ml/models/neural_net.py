@@ -364,6 +364,22 @@ def _batch_ranges(n_rows: int, batch_size: int) -> Iterator[tuple[int, int]]:
         yield start, end
 
 
+class _RebalancedBatchSampler:
+    """Shuffle every epoch while retaining rows from a final singleton tail."""
+
+    def __init__(self, n_rows: int, batch_size: int) -> None:
+        self.n_rows = n_rows
+        self.batch_size = batch_size
+
+    def __iter__(self):
+        order = torch.randperm(self.n_rows).tolist()
+        for start, end in _batch_ranges(self.n_rows, self.batch_size):
+            yield order[start:end]
+
+    def __len__(self) -> int:
+        return sum(1 for _ in _batch_ranges(self.n_rows, self.batch_size))
+
+
 def _device_permutation(n_rows: int, device: torch.device) -> torch.Tensor:
     try:
         return torch.randperm(n_rows, device=device)
@@ -468,7 +484,10 @@ def _train_dataloader(
         tensors["sample_weight"], tensors["share_target"],
         tensors["share_valid"],
     )
-    dl = DataLoader(ds, batch_size=cfg.batch_size, shuffle=True)
+    dl = DataLoader(
+        ds,
+        batch_sampler=_RebalancedBatchSampler(len(ds), cfg.batch_size),
+    )
     optimizer_steps = 0
     final_loss = float("nan")
     final_total_loss = float("nan")
@@ -479,8 +498,6 @@ def _train_dataloader(
         weighted_auxiliary = 0.0
         weight_total = 0.0
         for xn, xp, xcw, xca, xh, yt, wt, share_y, share_mask in dl:
-            if len(yt) == 1:
-                continue
             xn, xp, xcw, xca, xh, yt, wt, share_y, share_mask = (
                 xn.to(DEVICE), xp.to(DEVICE), xcw.to(DEVICE),
                 xca.to(DEVICE), xh.to(DEVICE), yt.to(DEVICE), wt.to(DEVICE),

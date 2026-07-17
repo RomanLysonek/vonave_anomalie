@@ -20,7 +20,6 @@ therefore attaches the same origin-state score to every product on that date.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from hashlib import sha256
 import gc
 import json
 import math
@@ -34,6 +33,14 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from anomaly_detection import calibrate_evt_threshold
+from artifact_provenance import (
+    artifact_fingerprint,
+    config_hash,
+    dataframe_content_hash,
+    output_fingerprints,
+    resolve_compute_device,
+    validate_artifact_manifest,
+)
 
 
 AUTOENCODER_ORIGIN_FEATURES = [
@@ -739,18 +746,30 @@ def config_from_framework(cfg: Any) -> AutoencoderV2Config:
     )
 
 
+AUTOENCODER_CACHE_SCHEMA_VERSION = "systemic-autoencoder-v2-cache-v5"
+AUTOENCODER_CACHE_SOURCE_PATHS = (
+    Path(__file__).resolve(),
+    Path(__file__).resolve().parent / "anomaly_detection.py",
+    Path(__file__).resolve().parent / "artifact_provenance.py",
+)
+
+
+def _cache_fingerprint(
+    raw_df: pd.DataFrame, ae_cfg: AutoencoderV2Config
+) -> dict[str, Any]:
+    return artifact_fingerprint(
+        schema_version=AUTOENCODER_CACHE_SCHEMA_VERSION,
+        semantic={
+            "config": asdict(ae_cfg),
+            "resolved_device": resolve_compute_device(ae_cfg.device),
+        },
+        dataframes={"raw_df": raw_df},
+        source_paths=AUTOENCODER_CACHE_SOURCE_PATHS,
+    )
+
+
 def _cache_key(raw_df: pd.DataFrame, ae_cfg: AutoencoderV2Config) -> str:
-    dates = pd.to_datetime(raw_df["DateKey"])
-    payload = {
-        "config": asdict(ae_cfg),
-        "rows": int(len(raw_df)),
-        "min_date": str(dates.min()),
-        "max_date": str(dates.max()),
-        "products": sorted(
-            int(value) for value in pd.Series(raw_df["ProductId"]).dropna().unique()
-        ),
-    }
-    return sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:20]
+    return config_hash(_cache_fingerprint(raw_df, ae_cfg))[:20]
 
 
 def build_cached_autoencoder_profile(
@@ -759,23 +778,53 @@ def build_cached_autoencoder_profile(
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Build or load a fold-local autoencoder profile.
 
-    Cache identity includes the fold's maximum date and every model/action
-    hyperparameter, so a later origin or different candidate cannot reuse a
-    semantically stale profile.
+    Cache identity includes full input content, model configuration, relevant
+    source, and dependency manifests. The sidecar also authenticates the pickle
+    bytes before deserialization.
     """
     ae_cfg = config_from_framework(cfg)
     cache_root = Path(getattr(cfg, "autoencoder_cache_dir", "outputs/anomaly_cache"))
-    key = _cache_key(raw_df, ae_cfg)
-    profile_path = cache_root / f"{key}.pkl"
+    fingerprint = _cache_fingerprint(raw_df, ae_cfg)
+    key = config_hash(fingerprint)[:20]
+    profile_path = cache_root / f"{key}.parquet"
     metadata_path = cache_root / f"{key}.json"
-    if profile_path.exists() and metadata_path.exists():
-        profile = pd.read_pickle(profile_path)
-        with metadata_path.open(encoding="utf-8") as handle:
-            metadata = json.load(handle)
-        metadata = dict(metadata)
-        metadata["cache_hit"] = True
-        metadata["cache_key"] = key
-        return profile, metadata
+    cache_exists = profile_path.exists() or metadata_path.exists()
+    if cache_exists:
+        try:
+            if not profile_path.exists() or not metadata_path.exists():
+                raise ValueError("autoencoder cache is incomplete")
+            with metadata_path.open(encoding="utf-8") as handle:
+                sidecar = json.load(handle)
+            valid, reason = validate_artifact_manifest(
+                sidecar,
+                fingerprint,
+                base_dir=cache_root,
+                required_outputs=(profile_path.name,),
+            )
+            if not valid:
+                raise ValueError(reason)
+            profile = pd.read_parquet(profile_path)
+            if not isinstance(profile, pd.DataFrame):
+                raise TypeError("cached profile is not a DataFrame")
+            if sidecar.get("profile_content_hash") != dataframe_content_hash(profile):
+                raise ValueError("cached profile content hash mismatch")
+            metadata = dict(sidecar.get("metadata") or {})
+            metadata["cache_hit"] = True
+            metadata["cache_key"] = key
+            return profile, metadata
+        except Exception as exc:
+            if not bool(getattr(cfg, "confirm_recompute_stale", False)):
+                raise RuntimeError(
+                    f"Stale or unverifiable autoencoder cache {profile_path}: {exc}. "
+                    "Pass --confirm-recompute-stale to deliberately retrain it."
+                ) from exc
+            print(f"[autoencoder cache] confirmed recompute of invalid {profile_path}: {exc}")
+
+    if not bool(getattr(cfg, "allow_autoencoder_cache_build", False)):
+        raise RuntimeError(
+            f"Autoencoder cache build is not authorized for missing/new cache {profile_path}. "
+            "Set allow_autoencoder_cache_build only from an explicit training/search entrypoint."
+        )
 
     profile, metadata, model, preprocessor = fit_score_systemic_autoencoder_v2(
         raw_df, ae_cfg
@@ -787,12 +836,19 @@ def build_cached_autoencoder_profile(
     elif torch.cuda.is_available():
         torch.cuda.empty_cache()
     cache_root.mkdir(parents=True, exist_ok=True)
-    tmp_profile = profile_path.with_suffix(f".tmp-{Path(profile_path).suffix.lstrip('.')}")
-    profile.to_pickle(tmp_profile)
+    tmp_profile = profile_path.with_suffix(".tmp.parquet")
+    profile.to_parquet(tmp_profile, index=False)
     tmp_profile.replace(profile_path)
+    sidecar = {
+        "schema_version": AUTOENCODER_CACHE_SCHEMA_VERSION,
+        "fingerprint": fingerprint,
+        "outputs": output_fingerprints(cache_root, (profile_path.name,)),
+        "profile_content_hash": dataframe_content_hash(profile),
+        "metadata": metadata,
+    }
     tmp_metadata = metadata_path.with_suffix(".tmp.json")
     with tmp_metadata.open("w", encoding="utf-8") as handle:
-        json.dump(metadata, handle, indent=2)
+        json.dump(sidecar, handle, indent=2, default=str)
     tmp_metadata.replace(metadata_path)
     metadata = dict(metadata)
     metadata["cache_hit"] = False

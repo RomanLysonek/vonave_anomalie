@@ -163,6 +163,8 @@ class Config:
     autoencoder_device: str = "auto"
     autoencoder_num_workers: int = 0
     autoencoder_cache_dir: str = "outputs/anomaly_cache"
+    allow_autoencoder_cache_build: bool = False
+    confirm_recompute_stale: bool = False
 
     # Structured-model workers are isolated processes on macOS. The default
     # keeps the original interactive behavior; overnight profiles override it.

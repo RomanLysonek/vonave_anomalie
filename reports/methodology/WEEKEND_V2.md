@@ -1,19 +1,28 @@
-# Weekend-v2: specialist, ensemble, and regime search
+# Weekend-v2 methodology: specialist, ensemble, and regime search
+
+> **Legacy evidence status: contaminated/unverified and excluded.** Historical
+> overnight diagnostics, leaderboards, recommendations, and the non-nested
+> preflight may contain benchmark-target contamination. Weekend-v2 must not seed
+> candidates or selection from them. It was not rerun; control with
+> `anomaly_mode=off` remains the recommendation.
 
 ## Purpose
 
-The first overnight search established two facts:
+The provenance-limited overnight report suggested two hypotheses:
 
-1. no anomaly candidate was robust enough to replace the canonical NeuralNet by itself;
-2. the confirmed anomaly candidates made sufficiently different errors that a leakage-safe blend improved both development and recent-benchmark WAPE.
+1. no standalone anomaly candidate beat the canonical NeuralNet control;
+2. a non-nested preflight blend appeared complementary, but its confidence interval crossed zero.
 
-Weekend-v2 therefore does **not** ask only whether `anomaly_mode=both` wins as a standalone model. It asks whether anomaly-derived models are useful specialists inside a cross-fitted mixture, whether their value is SKU-, horizon-, or regime-specific, and whether unusual observations should be downweighted, preserved, or emphasized.
+Weekend-v2 was not run. The proposed protocol asks whether anomaly-derived models are useful specialists inside a nested, cross-fitted mixture. The current recommendation remains the control with `anomaly_mode=off`.
 
 The frozen final-audit origins remain excluded from all search and selection.
 
 ## Evidence motivating v2
 
-Using only the three already-confirmed overnight OOF members—control, `stat_019_both_rw90`, and `hybrid_01`—a leave-one-origin-out global convex blend produced:
+The following historical numbers are retained for provenance review only and
+are not current scientific or selection evidence. Using three legacy overnight
+OOF members—control, `stat_019_both_rw90`, and `hybrid_01`—a leave-one-origin-out
+global convex blend had reported:
 
 | Evaluation | Control WAPE | Cross-fitted blend WAPE | Relative improvement |
 |---|---:|---:|---:|
@@ -22,9 +31,12 @@ Using only the three already-confirmed overnight OOF members—control, `stat_01
 
 The development-origin bootstrap estimated `P(improvement > 0) = 95.74%`. The full-development weights were approximately 52.7% control, 46.1% statistical specialist, and 1.2% hybrid specialist.
 
-A constrained gate that allowed the statistical specialist to contribute at most 85% only when it predicted an error advantage produced 1.302% development improvement and 2.943% recent-benchmark improvement. This is evidence for **conditional specialist value**, not evidence that anomaly mode should become the universal model.
+A constrained gate historically reported 1.302% development improvement and
+2.943% recent-benchmark improvement. Because its sources are now classified
+contaminated/unverified, this is not evidence for promotion or candidate
+selection.
 
-See [`../reports/WEEKEND_V2_PREFLIGHT.md`](../reports/WEEKEND_V2_PREFLIGHT.md).
+See [`../WEEKEND_V2_PREFLIGHT.md`](../WEEKEND_V2_PREFLIGHT.md).
 
 ## Why anomaly mode is retained
 
@@ -48,10 +60,10 @@ Weekend-v2 also includes anomaly-free recent-regime specialists. This gives the 
 The default `weekend-v2` profile starts with 45 candidates:
 
 - 1 canonical control;
-- 24 statistical anomaly candidates around the overnight near-winner;
+- 24 statistical anomaly candidates from fixed development hypotheses (legacy overnight winners are excluded);
 - 10 anomaly-free regime specialists;
-- 6 autoencoder specialists from the top three diagnostics, each tested as feature-only and combined action;
-- 4 statistical/autoencoder hybrids.
+- 0 autoencoder specialists from historical diagnostics;
+- 0 statistical/autoencoder hybrids seeded from historical diagnostics.
 
 ### Stage 1: NeuralNet screen
 
@@ -108,6 +120,14 @@ The convex search is vectorized; tens of thousands of Dirichlet draws are scored
 - The recent benchmark is used as a selection/safety regime, not to fit blend weights.
 - The final-audit origins are not read by weekend-v2.
 - Test-week actual demand is never used.
+
+Final execution accepts only recommendation schema v5 with provenance schema v3.
+Every member binds a safe search-root-relative `result.json` path, the complete
+expected fingerprint, canonical result-body digest, candidate identity,
+development/benchmark summary digests, and both OOF file fingerprints. The final
+runner revalidates every source result and OOF plus strict numeric plan/weight
+membership before loading training data. Pickles, learned gates, `model_path`,
+missing, legacy, traversing, or tampered sources fail closed.
 
 ## Promotion gates
 
@@ -203,7 +223,10 @@ outputs/weekend_v2_search/
   FINAL_REPORT.md
 ```
 
-The final command is stored in `recommendation.json`. It trains only the members required by the winning plan and writes:
+Only a verified declarative control/convex winner receives a final command in
+`recommendation.json`. Learned ridge/risk/specialist winners are archived with
+`execution_enabled=false` and no command. A permitted plan trains only the
+members required by the winning plan and writes:
 
 ```text
 outputs/weekend_v2_search/final/submission.csv

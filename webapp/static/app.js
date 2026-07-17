@@ -56,7 +56,7 @@ function renderRegimeExplanation(data, strategy, regime) {
 
   const selected = regime === "realized" ? realized : conditional;
   const nScored = selected[0]?.n_scored;
-  const scope = Number.isFinite(Number(nScored)) ? `${Number(nScored).toLocaleString()} common rows` : "the common evaluation rows";
+  const scope = Number.isFinite(Number(nScored)) ? `${Number(nScored).toLocaleString("en-GB")} common rows` : "the common evaluation rows";
   const definition = regime === "realized"
     ? "All observed product-days are scored, including unavailable days and their realized sales."
     : "Only product-days on which the product was available for purchase are scored.";
@@ -161,7 +161,7 @@ function renderColumns(data, strategy, regime) {
         <div class="model-stats">
           <div class="model-stat-row"><span>MAE</span><span>${fmt(stats.MAE)}</span></div>
           <div class="model-stat-row"><span>WAPE</span><span>${ratePct(stats.WAPE)}</span></div>
-          <div class="model-stat-row"><span>Bias</span><span style="color:${Number(stats.Bias) >= 0 ? "var(--bad)" : "var(--good)"}">${fmt(stats.Bias)}</span></div>
+          <div class="model-stat-row"><span>Bias</span><span class="bias-neutral">${fmt(stats.Bias)}</span></div>
           <div class="model-stat-row"><span>vs. Naive</span><span>${skill === null ? "—" : pct(skill)}</span></div>
         </div>
         <span class="model-column-cta">View details →</span>
@@ -221,7 +221,7 @@ function renderCvTable(data, strategy, regime) {
         <td class="model-cell" style="color:${color}">${row.model}</td>
         <td>${fmt(row.MAE)}</td>
         <td>${fmt(row.RMSE)}</td>
-        <td style="color:${Number(row.Bias) >= 0 ? "var(--bad)" : "var(--good)"}">${fmt(row.Bias)}</td>
+        <td class="bias-neutral">${fmt(row.Bias)}</td>
         <td>${pct(row.BiasRatio)}</td>
       </tr>
     `;
@@ -516,7 +516,7 @@ function renderPerProductDiagnostics(data, strategy, model, split) {
       <td>#${row.ProductId}</td>
       <td>${ratePct(row.WAPE, 1)}</td>
       <td>${fmt(row.MAE, 1)}</td>
-      <td class="${Math.abs(Number(row.BiasRatio)) <= 0.05 ? "good-text" : "bad-text"}">${pct(row.BiasRatio, 1)}</td>
+      <td class="bias-neutral">${pct(row.BiasRatio, 1)}</td>
       <td>${fmt(row.actual_total, 0)}</td>
     </tr>`).join("");
 }
@@ -570,7 +570,7 @@ function renderTopDecile(data, strategy) {
   const threshold = Number(rows[0].actual_threshold);
   const nRows = Number(rows[0].n);
   if (explanation) {
-    explanation.innerHTML = `<strong>Concrete reading:</strong> within the recent benchmark, product-day rows were ranked by their actual total quantity. The ${Number(rows[0].quantile || 0.9) * 100}th-percentile cutoff was ${fmt(threshold, 1)} units, leaving ${nRows.toLocaleString()} high-volume rows. WAPE, MAE and bias below are recomputed only on those rows; this is a retrospective stress diagnostic, not an input feature or a forecast filter.`;
+    explanation.innerHTML = `<strong>Concrete reading:</strong> within the recent benchmark, product-day rows were ranked by their actual total quantity. The ${Number(rows[0].quantile || 0.9) * 100}th-percentile cutoff was ${fmt(threshold, 1)} units, leaving ${nRows.toLocaleString("en-GB")} high-volume rows. WAPE, MAE and bias below are recomputed only on those rows; this is a retrospective stress diagnostic, not an input feature or a forecast filter.`;
   }
   tbody.innerHTML = rows.map((row) => `
     <tr>

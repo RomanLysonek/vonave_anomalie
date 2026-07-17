@@ -20,8 +20,8 @@ function rowCountCopy(row) {
   const expected = Number(row.n_expected);
   if (!Number.isFinite(scored)) return "Persisted row count unavailable";
   return Number.isFinite(expected)
-    ? `${scored.toLocaleString()} scored of ${expected.toLocaleString()} expected rows`
-    : `${scored.toLocaleString()} scored rows`;
+    ? `${scored.toLocaleString("en-GB")} scored of ${expected.toLocaleString("en-GB")} expected rows`
+    : `${scored.toLocaleString("en-GB")} scored rows`;
 }
 
 function renderCurrentEvaluation(data) {
@@ -69,7 +69,7 @@ function renderEvaluationStages(data) {
       title: `${cfg.num_products || 30} products × ${cfg.horizon || 7} days`,
       role: "Unlabelled forecast",
       body: `The selected final model is trained on all eligible history available before ${testStart}, then forecasts ${testRange} and produces the canonical ${Number(cfg.num_products || 30) * Number(cfg.horizon || 7)}-row grid. Test actuals are never used anywhere in evaluation or selection.`,
-      detail: `${(data.submission || []).length.toLocaleString()} submitted rows`,
+      detail: `${(data.submission || []).length.toLocaleString("en-GB")} submitted rows`,
     },
   ];
   document.getElementById("evaluation-stage-grid").innerHTML = stages.map((stage) => `

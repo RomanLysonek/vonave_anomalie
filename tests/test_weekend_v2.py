@@ -1,13 +1,45 @@
 from __future__ import annotations
 
 from pathlib import Path
+import pickle
+import json
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from anomaly_detection import build_demand_anomaly_profile
+from anomaly_search_common import (
+    apply_candidate_config,
+    selected_forecasting_config,
+    summarize_oof,
+    validate_target_roles,
+)
+from artifact_provenance import (
+    artifact_fingerprint,
+    config_hash,
+    neural_training_identity,
+    output_fingerprints,
+    result_body_manifest,
+)
 from framework import Config
-from run_weekend_v2_final import active_members
+from run_weekend_v2_final import (
+    _load_resumable_member,
+    _member_fingerprint,
+    _save_member_cache,
+    _safe_relative_path,
+    _validate_declarative_plan,
+    _validate_recommendation,
+    _validate_plan_member_identity,
+    active_members,
+)
+from run_weekend_v2_search import (
+    SCHEMA_VERSION as WEEKEND_SEARCH_SCHEMA,
+    _set_recommendation_execution_contract,
+    _write_recommendation_with_provenance,
+    rank_development_results,
+    select_development_winner,
+)
 from weekend_v2_common import (
     WEEKEND_V2_PROFILES,
     apply_specialist_gate,
@@ -19,6 +51,61 @@ from weekend_v2_common import (
     search_convex_weights,
     wape,
 )
+
+
+def _authenticated_result(
+    root: Path, candidate: dict, *, prediction: float = 9.0
+) -> dict:
+    trial = root / "confirmation" / candidate["id"]
+    trial.mkdir(parents=True)
+    origins = {
+        "development": pd.Timestamp("2025-01-01"),
+        "benchmark": pd.Timestamp("2026-01-01"),
+    }
+    frames = {}
+    for split, origin in origins.items():
+        frames[split] = pd.DataFrame({
+            "ProductId": [1],
+            "DateKey": [origin + pd.Timedelta(days=1)],
+            "origin": [origin],
+            "horizon": [1],
+            "actual": [10.0],
+            "pred_DynamicRidge": [prediction],
+            "ProductAvailable": [True],
+        })
+        frames[split].to_parquet(trial / f"{split}_oof.parquet", index=False)
+    fingerprint = artifact_fingerprint(
+        schema_version="weekend-source-test-v1",
+        semantic={"candidate": candidate},
+        source_paths=(),
+    )
+    payload = {
+        "schema_version": "anomaly-forecast-trial-v4",
+        "candidate": candidate,
+        "model": "DynamicRidge",
+        "epochs": 1,
+        "seeds": [42],
+        "development_origins": ["2025-01-01"],
+        "benchmark_origins": ["2026-01-01"],
+        "target_role_validation": validate_target_roles(
+            development_origins=["2025-01-01"],
+            benchmark_origins=["2026-01-01"],
+        ),
+        "development": summarize_oof(frames["development"], "DynamicRidge"),
+        "benchmark": summarize_oof(frames["benchmark"], "DynamicRidge"),
+        "status": "complete",
+    }
+    payload["artifact_manifest"] = {
+        "fingerprint": fingerprint,
+        "outputs": output_fingerprints(
+            trial, ("development_oof.parquet", "benchmark_oof.parquet")
+        ),
+        "result_body": result_body_manifest(payload),
+    }
+    result_path = trial / "result.json"
+    result_path.write_text(json.dumps(payload), encoding="utf-8")
+    payload["_result_path"] = str(result_path)
+    return payload
 
 
 def _ensemble_frame() -> tuple[pd.DataFrame, list[str]]:
@@ -120,10 +207,23 @@ def test_candidate_generator_is_valid_and_keeps_anomaly_and_non_anomaly_experts(
     assert "control" in families
     assert "statistical" in families
     assert "regime" in families
+    assert "autoencoder" not in families
+    assert "hybrid" not in families
     for item in candidates:
         config = item["config"]
         if "anomaly_rolling_window" in config:
             assert config["anomaly_min_history"] <= config["anomaly_rolling_window"]
+    statistical = [item for item in candidates if item["family"] == "statistical"]
+    assert statistical
+    assert all(
+        item["config"]["anomaly_rolling_window"] == 180
+        for item in statistical
+    )
+    assert all(
+        item["config"]["anomaly_rolling_window"] != 90
+        for item in candidates
+        if item["family"] == "statistical"
+    )
 
 
 def test_anomaly_weight_policies_can_downweight_or_emphasize_hard_examples() -> None:
@@ -172,7 +272,7 @@ def test_anomaly_weight_policies_can_downweight_or_emphasize_hard_examples() -> 
     assert float(hard["anomaly_weight"].max()) <= 1.75 + 1e-12
 
 
-def test_final_member_resolution_handles_new_plan_types() -> None:
+def test_final_member_resolution_allows_only_declarative_plan_types() -> None:
     members = [
         {"column": "member__control", "candidate": {"id": "control"}},
         {"column": "member__stat", "candidate": {"id": "stat"}},
@@ -187,7 +287,8 @@ def test_final_member_resolution_handles_new_plan_types() -> None:
         },
         "members": members,
     }
-    assert active_members(specialist) == {"member__control", "member__stat"}
+    with pytest.raises(ValueError, match="Unknown final plan method"):
+        active_members(specialist)
 
     product = {
         "winner": {
@@ -202,3 +303,278 @@ def test_final_member_resolution_handles_new_plan_types() -> None:
         "members": members,
     }
     assert active_members(product) == {"member__control", "member__stat"}
+
+
+def test_declarative_plan_validation_rejects_nonfinite_and_nonconvex_values() -> None:
+    columns = {"member__control", "member__stat"}
+    for weights in (
+        {"member__control": float("nan"), "member__stat": 0.0},
+        {"member__control": 0.8, "member__stat": 0.8},
+        {"member__control": -0.1, "member__stat": 1.1},
+    ):
+        with pytest.raises(RuntimeError, match="Declarative plan"):
+            _validate_declarative_plan(
+                {"method": "global_convex", "weights": weights}, columns
+            )
+    with pytest.raises(RuntimeError, match="Unsupported/untrusted"):
+        _validate_declarative_plan({
+            "method": "global_convex",
+            "weights": {"member__control": 1.0, "member__stat": 0.0},
+            "model_path": "model.pkl",
+        }, columns)
+
+
+def test_search_command_is_omitted_for_unsupported_winner(tmp_path) -> None:
+    unsupported = {
+        "winner": {"plan": {"method": "risk_gate", "model_path": "risk.pkl"}},
+        "final_submission_command": "must be removed",
+    }
+    _set_recommendation_execution_contract(unsupported, tmp_path)
+    assert unsupported["status"] == "archived_untrusted_artifact"
+    assert unsupported["execution_enabled"] is False
+    assert "final_submission_command" not in unsupported
+
+    safe = {"winner": {"plan": {"method": "control", "member": "member__control"}}}
+    _set_recommendation_execution_contract(safe, tmp_path)
+    assert safe["status"] == "verified_declarative"
+    assert safe["execution_enabled"] is True
+    assert "run_weekend_v2_final.py" in safe["final_submission_command"]
+
+
+def test_final_member_resume_requires_matching_manifest_and_csv(tmp_path) -> None:
+    train = pd.DataFrame({
+        "ProductId": [1, 1],
+        "DateKey": pd.to_datetime(["2026-01-01", "2026-01-02"]),
+        "Quantity": [2.0, 3.0],
+    })
+    test = pd.DataFrame({
+        "ProductId": [1, 1],
+        "DateKey": pd.to_datetime(["2026-01-03", "2026-01-04"]),
+    })
+    candidate = {"id": "candidate", "config": {"anomaly_mode": "off"}}
+    identity_cfg = apply_candidate_config(selected_forecasting_config(), candidate)
+    identity = neural_training_identity(identity_cfg)
+    execution = [{
+        "seed": 42,
+        "device": identity["device"],
+        "backend": identity["resolved_backend"],
+        "batch_size": identity["batch_size"],
+        "reference_batch_size": identity["reference_batch_size"],
+    }]
+    fingerprint = _member_fingerprint(
+        candidate, train, test, epochs=3, seeds=(42,), device="cpu"
+    )
+    cached = test.copy()
+    cached["prediction"] = [4.0, 5.0]
+    _save_member_cache(tmp_path, cached, fingerprint, execution)
+
+    loaded = _load_resumable_member(
+        tmp_path, fingerprint, test, identity, (42,)
+    )
+    assert loaded is not None
+    assert loaded["prediction"].tolist() == [4.0, 5.0]
+
+    manifest_path = tmp_path / "predictions.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["neural_execution"]["rows"][0]["backend"] = "unrelated"
+    manifest["neural_execution"]["sha256"] = config_hash(
+        manifest["neural_execution"]["rows"]
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="execution identity"):
+        _load_resumable_member(
+            tmp_path, fingerprint, test, identity, (42,)
+        )
+    _save_member_cache(tmp_path, cached, fingerprint, execution)
+
+    changed_candidate = {"id": "candidate", "config": {"anomaly_mode": "features"}}
+    stale = _member_fingerprint(
+        changed_candidate, train, test, epochs=3, seeds=(42,), device="cpu"
+    )
+    with pytest.raises(RuntimeError, match="confirm-recompute-stale"):
+        _load_resumable_member(tmp_path, stale, test, identity, (42,))
+    assert _load_resumable_member(
+        tmp_path,
+        stale,
+        test,
+        identity,
+        (42,),
+        confirm_recompute_stale=True,
+    ) is None
+
+    changed_test = test.assign(Price=[1.0, 2.0])
+    changed_fingerprint = _member_fingerprint(
+        candidate, train, changed_test, epochs=3, seeds=(42,), device="cpu"
+    )
+    assert changed_fingerprint != fingerprint
+    with pytest.raises(RuntimeError, match="confirm-recompute-stale"):
+        _load_resumable_member(
+            tmp_path, changed_fingerprint, test, identity, (42,)
+        )
+
+    (tmp_path / "predictions.csv").write_text(
+        "ProductId,DateKey,prediction\n1,2026-01-03,999\n", encoding="utf-8"
+    )
+    with pytest.raises(RuntimeError, match="confirm-recompute-stale"):
+        _load_resumable_member(tmp_path, fingerprint, test, identity, (42,))
+
+
+def test_weekend_selection_is_invariant_to_frozen_benchmark() -> None:
+    def payload(candidate_id: str, family: str, dev: float, bench: float) -> dict:
+        summary = {
+            "global": {"WAPE": dev},
+            "top_actual_decile": {"WAPE": dev},
+            "by_origin": {
+                "2026-01-01": {"WAPE": dev},
+                "2026-02-01": {"WAPE": dev},
+            },
+        }
+        return {
+            "candidate": {"id": candidate_id, "name": candidate_id, "family": family},
+            "development": summary,
+            "benchmark": {"global": {"WAPE": bench}},
+        }
+
+    results = [
+        payload("control", "control", 1.0, 1.0),
+        payload("better", "statistical", 0.8, 1000.0),
+        payload("worse", "regime", 0.9, 0.001),
+    ]
+    before = [row["candidate_id"] for row in rank_development_results(results)]
+    results[1]["benchmark"]["global"]["WAPE"] = 0.00001
+    results[2]["benchmark"]["global"]["WAPE"] = 99999.0
+    after = [row["candidate_id"] for row in rank_development_results(results)]
+    assert before == after
+
+    rows = [
+        {
+            "name": "better",
+            "accepted": True,
+            "selection_score": 0.2,
+            "benchmark": {"relative_improvement": -999.0},
+        },
+        {
+            "name": "worse",
+            "accepted": True,
+            "selection_score": 0.1,
+            "benchmark": {"relative_improvement": 999.0},
+        },
+    ]
+    assert select_development_winner(rows)["name"] == "better"
+
+
+def test_malicious_mutually_consistent_pickle_is_never_deserialized(tmp_path) -> None:
+    (tmp_path / "manifest.json").write_text(
+        json.dumps({"artifact_fingerprint": {"input": "bound"}}),
+        encoding="utf-8",
+    )
+    marker = tmp_path / "deserialized.marker"
+    model_path = tmp_path / "ensemble" / "gate.pkl"
+    model_path.parent.mkdir()
+
+    class MarkerPayload:
+        def __reduce__(self):
+            return (Path.write_text, (marker, "deserialized"))
+
+    model_path.write_bytes(pickle.dumps(MarkerPayload()))
+    member_column = "member__control"
+    candidate = {"id": "control", "name": "control", "family": "control", "config": {}}
+    recommendation = {
+        "schema_version": WEEKEND_SEARCH_SCHEMA,
+        "status": "verified_declarative",
+        "execution_enabled": True,
+        "members": [{"column": member_column, "candidate": candidate}],
+        "winner": {
+            "name": "gate",
+            "plan": {
+                "method": "specialist_gate",
+                "model_path": "ensemble/gate.pkl",
+                "control_column": member_column,
+                "specialist_column": member_column,
+            },
+        },
+    }
+    results = [_authenticated_result(tmp_path, candidate)]
+    _write_recommendation_with_provenance(tmp_path, recommendation, results)
+    recommendation_path = tmp_path / "recommendation.json"
+    loaded = json.loads(recommendation_path.read_text(encoding="utf-8"))
+    with pytest.raises(RuntimeError, match="Unsupported/untrusted"):
+        _validate_recommendation(recommendation_path, loaded)
+    assert not marker.exists()
+    source = Path("ml/run_weekend_v2_final.py").read_text(encoding="utf-8")
+    assert "load_pickle" not in source
+    assert "pickle.load" not in source
+    assert "joblib" not in source
+
+
+def test_recommendation_source_missing_tampered_oof_and_traversal_are_rejected(
+    tmp_path,
+) -> None:
+    (tmp_path / "manifest.json").write_text(
+        json.dumps({"artifact_fingerprint": {"input": "bound"}}),
+        encoding="utf-8",
+    )
+    candidate = {"id": "control", "name": "control", "family": "control", "config": {}}
+    result = _authenticated_result(tmp_path, candidate)
+    recommendation = {
+        "schema_version": WEEKEND_SEARCH_SCHEMA,
+        "status": "verified_declarative",
+        "execution_enabled": True,
+        "reference_member": "member__control",
+        "members": [{"column": "member__control", "candidate": candidate}],
+        "winner": {
+            "name": "control",
+            "plan": {"method": "control", "member": "member__control"},
+        },
+    }
+    _write_recommendation_with_provenance(tmp_path, recommendation, [result])
+    recommendation_path = tmp_path / "recommendation.json"
+    loaded = json.loads(recommendation_path.read_text(encoding="utf-8"))
+    _validate_recommendation(recommendation_path, loaded)
+
+    source_path = Path(result["_result_path"])
+    source_bytes = source_path.read_bytes()
+    source_path.unlink()
+    with pytest.raises(RuntimeError, match="source result is invalid"):
+        _validate_recommendation(recommendation_path, loaded)
+    source_path.write_bytes(source_bytes)
+
+    oof_path = source_path.parent / "development_oof.parquet"
+    oof_bytes = oof_path.read_bytes()
+    oof_path.write_bytes(b"tampered")
+    with pytest.raises(RuntimeError, match="source result is invalid"):
+        _validate_recommendation(recommendation_path, loaded)
+    oof_path.write_bytes(oof_bytes)
+
+    payload = json.loads(source_path.read_text(encoding="utf-8"))
+    payload["development"]["global"]["WAPE"] = 999.0
+    source_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="source result is invalid"):
+        _validate_recommendation(recommendation_path, loaded)
+
+    with pytest.raises(RuntimeError, match="Unsafe provenance path"):
+        _safe_relative_path(tmp_path, "../outside/result.json")
+
+
+def test_legacy_recommendation_requires_future_provenance(tmp_path) -> None:
+    path = tmp_path / "recommendation.json"
+    legacy = {"winner": {"plan": {"method": "control"}}}
+    path.write_text(json.dumps(legacy), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="Unsupported/untrusted"):
+        _validate_recommendation(path, legacy)
+
+
+@pytest.mark.parametrize("candidate_id", ["../escape", "/absolute", "nested/path"])
+def test_recommendation_candidate_ids_cannot_escape_member_root(candidate_id) -> None:
+    recommendation = {
+        "reference_member": f"member__{candidate_id}",
+        "members": [{
+            "column": f"member__{candidate_id}",
+            "candidate": {"id": candidate_id},
+        }],
+        "winner": {
+            "plan": {"method": "control", "member": f"member__{candidate_id}"}
+        },
+    }
+    with pytest.raises(RuntimeError, match="member/candidate identity"):
+        _validate_plan_member_identity(recommendation)
