@@ -31,12 +31,14 @@ if [[ ! -f "$PRIOR_ROOT/recommendation.json" ]]; then
   exit 2
 fi
 
-EXTRA_ARGS=("$@")
+# Keep optional CLI arguments in the positional-parameter list. This is
+# compatible with the Bash 3.2 shipped by macOS, where expanding an empty
+# array under `set -u` raises "unbound variable".
 if [[ "${RETRY_FAILED:-0}" == "1" ]]; then
-  EXTRA_ARGS+=(--retry-failed)
+  set -- "$@" --retry-failed
 fi
 if [[ "${FAIL_FAST:-0}" == "1" ]]; then
-  EXTRA_ARGS+=(--fail-fast)
+  set -- "$@" --fail-fast
 fi
 
 {
@@ -59,4 +61,4 @@ caffeinate -dimsu uv run python ml/run_weekend_v2_search.py \
   --device mps \
   --max-hours "$MAX_HOURS" \
   --resume \
-  "${EXTRA_ARGS[@]}" 2>&1 | tee -a "$LOG_FILE"
+  "$@" 2>&1 | tee -a "$LOG_FILE"

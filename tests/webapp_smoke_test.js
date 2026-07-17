@@ -335,6 +335,9 @@ function checkEvaluationMethodology() {
   assert.ok(elements["strategy-method-list"].innerHTML.includes("Recursive one-step"));
   assert.ok(elements["selection-objective-list"].innerHTML.includes("60% weight"));
   assert.ok(elements["site-nav"].innerHTML.includes("evaluation.html"));
+  assert.ok(elements["site-nav"].innerHTML.includes("Anomaly Lab"));
+  assert.ok(elements["site-nav"].innerHTML.includes("Control NeuralNet"));
+  assert.ok(!elements["site-nav"].innerHTML.includes("Dynamic Ridge"));
   assert.ok(elements["site-nav"].innerHTML.includes("nav-pill active"));
 }
 
@@ -408,6 +411,8 @@ function checkDatasetStory() {
   assert.ok(elements["dataset-response-list"].innerHTML.includes("Staggered launches and isolated gaps"));
   assert.ok(elements["dataset-response-list"].innerHTML.includes("channel-aware variants worsened total-demand accuracy"));
   assert.ok(elements["site-nav"].innerHTML.includes("dataset.html"));
+  assert.ok(elements["site-nav"].innerHTML.includes("Anomaly Lab"));
+  assert.ok(elements["site-nav"].innerHTML.includes("Control NeuralNet"));
   assert.ok(elements["site-nav"].innerHTML.includes("nav-pill active"));
   assert.strictEqual(overviewLink.href, "index.html");
 }

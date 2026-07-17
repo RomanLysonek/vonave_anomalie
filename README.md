@@ -22,6 +22,24 @@ The original forecasting implementation and its detailed documentation are prese
 
 The quick-run evidence is in [`reports/REAL_DATA_TEST_RESULTS.md`](reports/REAL_DATA_TEST_RESULTS.md). The serious local experiment is documented in [`docs/OVERNIGHT_ANOMALY_SEARCH.md`](docs/OVERNIGHT_ANOMALY_SEARCH.md).
 
+## Anomaly Lab dashboard
+
+The local webapp now contains a dedicated **Anomaly Lab** rather than only the inherited forecasting pages. It reads the research artifacts directly from `outputs/` and shows:
+
+- product-level statistical anomalies against their causal seasonal expectation;
+- local versus systemic flags and known-event protection;
+- autoencoder reconstruction timelines, split calibration and temporal drift;
+- test-week context novelty using future-known covariates only;
+- the overnight candidate funnel and confirmed NeuralNet comparison;
+- live weekend-v2 screening/refinement/confirmation progress;
+- the final specialist/ensemble recommendation and generated command.
+
+```bash
+uv run python webapp/server.py
+```
+
+Open [`http://127.0.0.1:9001/anomalies`](http://127.0.0.1:9001/anomalies). The page polls the lightweight search-status endpoint once per minute, so a running weekend-v2 experiment becomes visible without restarting the server. Override the port with `VONAVE_ANOMALIE_PORT=<port>`.
+
 ## What was transferred from DAVID
 
 | DAVID concept | Forecasting adaptation | Purpose |

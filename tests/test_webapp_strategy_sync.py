@@ -368,7 +368,7 @@ def test_promo_bar_uses_narrow_notino_style_desktop_ribbon():
 
     for name in ("index.html", "model.html", "evaluation.html", "dataset.html"):
         html = (STATIC / name).read_text()
-        expected = 'styles.css?v=18'
+        expected = 'styles.css?v=22'
         assert expected in html
 
 
@@ -377,7 +377,7 @@ def test_model_tabs_explain_exact_project_usage_and_submission_grid_is_uniform()
     assert 'id="model-method-panel"' in model_html
     assert 'id="model-method-intro"' in model_html
     assert 'id="model-method-list"' in model_html
-    assert 'model.js?v=16' in model_html
+    assert 'model.js?v=17' in model_html
     assert 'id="nn-selection-panel"' in model_html
     assert 'id="nn-selection-grid"' in model_html
     assert "How we arrived at the submitted NeuralNet" in model_html
@@ -407,7 +407,7 @@ def test_model_tabs_explain_exact_project_usage_and_submission_grid_is_uniform()
 
     overview = (STATIC / "index.html").read_text()
     assert 'app.js?v=14' in overview
-    assert 'styles.css?v=18' in overview
+    assert 'styles.css?v=22' in overview
 
     app_js = (STATIC / "app.js").read_text()
     assert 'class="data-table submission-table"' in app_js
