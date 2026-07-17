@@ -19,7 +19,7 @@
 ## Phase 2 — DAVID-style statistical calibration
 
 - [x] Implement POT/GPD upper-tail calibration.
-- [x] Select candidate tail cutoffs by temporal validation FAR and KS fit.
+- [x] Select candidate tail cutoffs by temporal validation exceedance-rate error and KS fit.
 - [x] Add deterministic empirical fallback for small/unstable samples.
 - [x] Persist calibration metadata.
 

@@ -1,4 +1,4 @@
-# Overnight anomaly search on Apple Silicon
+# Overnight anomaly search methodology
 
 ## Purpose
 

@@ -1,7 +1,7 @@
 async function loadResults() {
   const candidates = window.STATIC_DASHBOARD
-    ? ["./results.json"]
-    : ["/api/results", "/static/results.json", "./results.json"];
+    ? ["./data/results.json"]
+    : ["/data/results.json"];
   let lastError = null;
   for (const url of candidates) {
     try {
@@ -53,7 +53,7 @@ function wireSharedLinks() {
 
 function fmt(n, digits = 1) {
   if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
-  return Number(n).toLocaleString(undefined, {
+  return Number(n).toLocaleString("en-GB", {
     maximumFractionDigits: digits,
     minimumFractionDigits: digits,
   });

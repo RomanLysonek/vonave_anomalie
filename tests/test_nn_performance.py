@@ -8,6 +8,7 @@ from sklearn.preprocessing import StandardScaler
 from framework import Config
 from models.neural_net import (
     _batch_ranges,
+    _RebalancedBatchSampler,
     effective_learning_rate,
     make_tensors,
     nn_performance_signature,
@@ -33,6 +34,13 @@ def test_batch_ranges_never_emit_singleton():
     ranges = list(_batch_ranges(1025, 512))
     assert ranges == [(0, 512), (512, 1023), (1023, 1025)]
     assert all(end - start >= 2 for start, end in ranges)
+
+
+def test_dataloader_batch_sampler_retains_singleton_tail_row():
+    batches = list(_RebalancedBatchSampler(513, 512))
+    flattened = [index for batch in batches for index in batch]
+    assert sorted(flattened) == list(range(513))
+    assert all(len(batch) >= 2 for batch in batches)
 
 
 def test_device_resident_training_reports_stats():

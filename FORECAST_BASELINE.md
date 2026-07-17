@@ -8,6 +8,11 @@ PyTorch feed-forward network with product/campaign embeddings -- XGBoost and
 LightGBM are still included as walk-forward-validated baselines, since the
 brief itself frames them as the standard comparison point.
 
+The anomaly research extension does not alter this baseline recommendation:
+the current published policy is the control with `anomaly_mode=off`. No anomaly
+truth labels exist, known events are explanatory proxies, and standalone
+anomaly policies did not beat the control.
+
 ## Approach
 
 - **Features**: cyclic calendar encodings (day-of-week/month/day-of-year/
@@ -738,10 +743,11 @@ Every normal pipeline/export now adds:
 - C5 weights and benchmark confirmation;
 - the one-shot final-audit table once available.
 
-`outputs/results.json` is copied to `webapp/static/results.json`, and a static
-GitHub Pages site is generated in `docs/`. Configure Pages to serve the `/docs`
-directory. The static model pages use query-string navigation and no FastAPI
-server is required.
+`outputs/results.json` is copied to generated `docs/data/results.json`, alongside
+the versioned anomaly aggregate and product artifacts. The authored
+`webapp/static/` tree contains only HTML/CSS/JavaScript source; `docs/` is the
+manifest-owned GitHub Pages output. The static model pages use query-string
+navigation and no FastAPI server is required.
 
 ### Final C5/C6 confirmation result
 

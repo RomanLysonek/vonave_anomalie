@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
-import shutil
 from pathlib import Path
 from typing import Mapping
 
@@ -233,49 +231,9 @@ def publish_static_dashboard(
     repository_root: str | Path,
     results_path: str | Path,
 ) -> dict:
-    """Copy the strict results payload beside runtime assets and build docs/.
-
-    ``webapp/static/results.json`` is a local API fallback. ``docs/`` is a
-    self-contained GitHub Pages site with relative asset and navigation URLs.
-    """
-    root = Path(repository_root)
-    results_path = Path(results_path)
-    static_dir = root / "webapp" / "static"
-    docs_dir = root / "docs"
-    if not results_path.exists():
-        raise FileNotFoundError(results_path)
-    static_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(results_path, static_dir / "results.json")
-
-    if docs_dir.exists():
-        shutil.rmtree(docs_dir)
-    docs_dir.mkdir(parents=True)
-    for source in static_dir.iterdir():
-        if not source.is_file():
-            continue
-        destination = docs_dir / source.name
-        if source.suffix.lower() == ".html":
-            destination.write_text(
-                _static_html(source.read_text(encoding="utf-8")),
-                encoding="utf-8",
-            )
-        else:
-            shutil.copy2(source, destination)
-    (docs_dir / ".nojekyll").write_text("", encoding="utf-8")
-    (docs_dir / "README.md").write_text(
-        "# Static Notino forecast dashboard\n\n"
-        "Generated from `outputs/results.json`. Configure GitHub Pages to serve "
-        "the `/docs` directory.\n",
-        encoding="utf-8",
-    )
-    manifest = {
-        "schema_version": DASHBOARD_SCHEMA_VERSION,
-        "runtime_results": str((static_dir / "results.json").relative_to(root)),
-        "static_site": str(docs_dir.relative_to(root)),
-        "entrypoint": "docs/index.html",
-    }
-    manifest_path = root / "outputs" / "dashboard_manifest.json"
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    with manifest_path.open("w", encoding="utf-8") as handle:
-        json.dump(manifest, handle, indent=2)
-    return manifest
+    """Publish through the ownership-safe static-site implementation."""
+    try:
+        from ml.publish_site import publish_site
+    except ImportError:
+        from publish_site import publish_site
+    return publish_site(repository_root, results_path)

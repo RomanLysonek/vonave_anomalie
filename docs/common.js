@@ -1,7 +1,7 @@
 async function loadResults() {
   const candidates = window.STATIC_DASHBOARD
-    ? ["./results.json"]
-    : ["/api/results", "/static/results.json", "./results.json"];
+    ? ["./data/results.json"]
+    : ["/data/results.json"];
   let lastError = null;
   for (const url of candidates) {
     try {
@@ -34,6 +34,10 @@ function evaluationHref() {
   return window.STATIC_DASHBOARD ? "evaluation.html" : "/evaluation";
 }
 
+function anomaliesHref() {
+  return window.STATIC_DASHBOARD ? "anomalies.html" : "/anomalies";
+}
+
 function wireSharedLinks() {
   if (typeof document === "undefined" || !document.querySelectorAll) return;
   document.querySelectorAll("[data-dataset-link]").forEach((link) => {
@@ -42,11 +46,14 @@ function wireSharedLinks() {
   document.querySelectorAll("[data-evaluation-link]").forEach((link) => {
     link.href = evaluationHref();
   });
+  document.querySelectorAll("[data-anomalies-link]").forEach((link) => {
+    link.href = anomaliesHref();
+  });
 }
 
 function fmt(n, digits = 1) {
   if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
-  return Number(n).toLocaleString(undefined, {
+  return Number(n).toLocaleString("en-GB", {
     maximumFractionDigits: digits,
     minimumFractionDigits: digits,
   });
@@ -192,23 +199,31 @@ function updateStrategyCopy(data, strategy) {
     footer.textContent = `Canonical submission: ${canonical}. The dashboard can compare every available strategy without changing the submitted forecast.`;
   }
   const modelCount = document.getElementById("promo-model-count");
-  if (modelCount) modelCount.textContent = `${(data.models || []).length} Models Compared`;
+  if (modelCount) modelCount.textContent = "Research Models Compared";
 }
 
-/** Renders the shared top nav: Overview + Dataset + Evaluation + one pill per model. */
+/**
+ * Renders the anomaly-research navigation.
+ *
+ * The baseline models remain visible in the Overview comparison, but only the
+ * canonical NeuralNet receives a dedicated model tab. Statistical, autoencoder
+ * and hybrid specialists are research policies and are presented in Anomaly Lab.
+ */
 function renderNav(data, activeSlug) {
   const nav = document.getElementById("site-nav");
   if (!nav) return;
+  const neuralNet = (data.models || []).find((model) => model.key === "NeuralNet");
   const items = [
     { slug: "", label: "Overview", color: "#ffffff", href: overviewHref() },
+    { slug: "anomalies", label: "Anomaly Lab", color: "#f59e0b", href: anomaliesHref() },
     { slug: "dataset", label: "Data story", color: "#a78bfa", href: datasetHref() },
     { slug: "evaluation", label: "Evaluation", color: "#9ca3af", href: evaluationHref() },
-    ...(data.models || []).map((m) => ({
-      slug: m.slug,
-      label: m.label,
-      color: m.color,
-      href: modelHref(m.slug),
-    })),
+    ...(neuralNet ? [{
+      slug: neuralNet.slug,
+      label: "Control NeuralNet",
+      color: neuralNet.color,
+      href: modelHref(neuralNet.slug),
+    }] : []),
   ];
   nav.innerHTML = items
     .map((it) => {

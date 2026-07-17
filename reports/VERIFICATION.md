@@ -1,5 +1,11 @@
 # Verification record
 
+> Scientific status: no anomaly truth labels exist; known events are
+> explanatory proxies, not labels. The compact autoencoder evidence below is
+> legacy and excluded because its preprocessing used future-derived medians.
+> Fingerprinted V2 is canonical, no verified V2 artifact is published, and the
+> current recommendation is the control with `anomaly_mode=off`. record
+
 Date: 2026-07-15
 
 ## Completed checks
@@ -92,7 +98,7 @@ Results:
 - 485 local anomalies among 49,595 scored product-days;
 - 35 systemic anomaly days;
 - 0 of 210 test-context rows above the 99th-percentile shift threshold after fixing the feature contract;
-- original-split autoencoder: 1,176 training, 362 calibration and 272 holdout windows, 64 flags, but 33.3% validation false-alarm rate against a 2% target;
+- original-split compact autoencoder: 1,176 training, 362 calibration and 272 holdout windows, 64 flags, but a 33.3% validation exceedance rate against a 2% target; this legacy run is excluded because preprocessing used future-derived medians;
 - recent-split autoencoder: 1,448 training, 181 calibration and 181 holdout windows, one calibration flag and zero holdout flags;
 - anomaly weighting: no development gain and slight benchmark regression; selected policy `control`.
 

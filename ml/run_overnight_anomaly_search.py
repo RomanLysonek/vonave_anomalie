@@ -55,9 +55,17 @@ from anomaly_search_common import (
     write_json,
 )
 from framework import Config, load_raw
+from artifact_provenance import (
+    artifact_fingerprint,
+    diagnostic_trial_fingerprint,
+    environment_metadata,
+    forecast_trial_fingerprint,
+    load_validated_result,
+    OVERNIGHT_SEARCH_SOURCE_PATHS,
+)
 
 
-SCHEMA_VERSION = "overnight-anomaly-search-v1"
+SCHEMA_VERSION = "overnight-anomaly-search-v2"
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,6 +81,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=20260715)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--retry-failed", action="store_true")
+    parser.add_argument(
+        "--confirm-recompute-stale",
+        action="store_true",
+        help="Deliberately replace stale, corrupt, or unverifiable expensive artifacts",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--save-diagnostic-scores", action="store_true")
@@ -175,11 +188,42 @@ def _run_command(
         return int(process.wait())
 
 
-def _should_skip(trial_dir: Path, args: argparse.Namespace) -> bool:
-    if (trial_dir / "result.json").exists():
-        return True
-    if (trial_dir / "failure.json").exists() and not args.retry_failed:
-        return True
+def _should_skip(
+    trial_dir: Path,
+    args: argparse.Namespace,
+    expected_fingerprint: dict[str, Any],
+    *,
+    required_outputs: tuple[str, ...] = (),
+) -> bool:
+    result_path = trial_dir / "result.json"
+    if result_path.exists():
+        payload, reason = load_validated_result(
+            result_path,
+            expected_fingerprint,
+            required_outputs=required_outputs,
+        )
+        if payload is not None:
+            return True
+        if not getattr(args, "confirm_recompute_stale", False):
+            raise RuntimeError(
+                f"Stale or unverifiable result {result_path}: {reason}. "
+                "Pass --confirm-recompute-stale to deliberately rerun it."
+            )
+        print(f"[resume] confirmed recompute of invalid {result_path}: {reason}")
+    if (trial_dir / "failure.json").exists():
+        failure_path = trial_dir / "failure.json"
+        failure = load_json(failure_path)
+        if failure.get("fingerprint") == expected_fingerprint and not args.retry_failed:
+            return True
+        if (
+            failure.get("fingerprint") != expected_fingerprint
+            and not getattr(args, "confirm_recompute_stale", False)
+        ):
+            raise RuntimeError(
+                f"Stale failure record {failure_path}. Pass "
+                "--confirm-recompute-stale to deliberately rerun it."
+            )
+        print(f"[resume] confirmed retry after failure {failure_path}")
     return False
 
 
@@ -201,16 +245,113 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     tmp.replace(path)
 
 
-def _load_completed_results(stage_dir: Path) -> list[dict[str, Any]]:
+def _load_completed_results(
+    stage_dir: Path,
+    expected_by_id: dict[str, dict[str, Any]],
+    *,
+    required_outputs: tuple[str, ...] = (),
+    confirm_recompute_stale: bool = False,
+) -> list[dict[str, Any]]:
     results = []
     if not stage_dir.exists():
         return results
     for result_path in sorted(stage_dir.glob("*/result.json")):
-        payload = load_json(result_path)
-        if payload.get("status") == "complete":
-            payload["_result_path"] = str(result_path)
-            results.append(payload)
+        expected = expected_by_id.get(result_path.parent.name)
+        if expected is None:
+            print(f"[resume] ignoring unrecognized result {result_path}")
+            continue
+        payload, reason = load_validated_result(
+            result_path, expected, required_outputs=required_outputs
+        )
+        if payload is None:
+            if not confirm_recompute_stale:
+                raise RuntimeError(
+                    f"Stale or unverifiable result {result_path}: {reason}. "
+                    "Pass --confirm-recompute-stale before continuing broad work."
+                )
+            print(f"[resume] confirmed ignore of invalid {result_path}: {reason}")
+            continue
+        payload["_result_path"] = str(result_path)
+        results.append(payload)
     return results
+
+
+def _diagnostic_fingerprints(
+    candidates: list[dict[str, Any]],
+    train: pd.DataFrame,
+    cutoffs: pd.DatetimeIndex,
+    seeds: tuple[int, ...],
+    args: argparse.Namespace,
+) -> dict[str, dict[str, Any]]:
+    return {
+        item["id"]: diagnostic_trial_fingerprint(
+            candidate=item,
+            train_data=train,
+            cutoffs=cutoffs,
+            seeds=seeds,
+            device=args.device,
+            save_scores=args.save_diagnostic_scores,
+        )
+        for item in candidates
+    }
+
+
+def _forecast_fingerprints(
+    candidates: list[dict[str, Any]],
+    train: pd.DataFrame,
+    *,
+    model: str,
+    epochs: int,
+    seeds: tuple[int, ...],
+    dev_origins: pd.DatetimeIndex,
+    bench_origins: pd.DatetimeIndex,
+    device: str,
+) -> dict[str, dict[str, Any]]:
+    return {
+        item["id"]: forecast_trial_fingerprint(
+            candidate=item,
+            train_data=train,
+            model=model,
+            epochs=epochs,
+            seeds=seeds,
+            device=device,
+            development_origins=dev_origins,
+            benchmark_origins=bench_origins,
+        )
+        for item in candidates
+    }
+
+
+def _load_forecast_stage(
+    root: Path,
+    stage_name: str,
+    train: pd.DataFrame,
+    candidates: list[dict[str, Any]],
+    *,
+    model: str,
+    epochs: int,
+    seeds: tuple[int, ...],
+    dev_origins: pd.DatetimeIndex,
+    bench_origins: pd.DatetimeIndex,
+    device: str,
+    confirm_recompute_stale: bool = False,
+) -> list[dict[str, Any]]:
+    expected = _forecast_fingerprints(
+        candidates,
+        train,
+        model=model,
+        epochs=epochs,
+        seeds=seeds,
+        dev_origins=dev_origins,
+        bench_origins=bench_origins,
+        device=device,
+    )
+    return _load_completed_results(
+        root / stage_name,
+        expected,
+        required_outputs=("development_oof.parquet", "benchmark_oof.parquet"),
+        confirm_recompute_stale=confirm_recompute_stale,
+    )
 
 
 def _run_diagnostics(
@@ -225,11 +366,28 @@ def _run_diagnostics(
     cutoff_arg = ",".join(str(value.date()) for value in cutoffs)
     seed_arg = ",".join(str(value) for value in profile.autoencoder_seeds)
     stage_dir = root / "diagnostic"
+    expected_by_id = _diagnostic_fingerprints(
+        candidates, train, cutoffs, profile.autoencoder_seeds, args
+    )
+    required_outputs = (
+        tuple(
+            f"scores_{cutoff.date()}_seed{seed}.parquet"
+            for cutoff in cutoffs
+            for seed in profile.autoencoder_seeds
+        )
+        if args.save_diagnostic_scores
+        else ()
+    )
     for index, item in enumerate(candidates, start=1):
         if _time_budget_exhausted(started, args.max_hours):
             break
         trial_dir = stage_dir / item["id"]
-        if _should_skip(trial_dir, args):
+        if _should_skip(
+            trial_dir,
+            args,
+            expected_by_id[item["id"]],
+            required_outputs=required_outputs,
+        ):
             continue
         candidate_path = _candidate_file(root, item)
         command = [
@@ -255,7 +413,12 @@ def _run_diagnostics(
         if code != 0 and args.fail_fast:
             raise RuntimeError(f"Diagnostic candidate {item['id']} failed with exit {code}")
 
-    results = _load_completed_results(stage_dir)
+    results = _load_completed_results(
+        stage_dir,
+        expected_by_id,
+        required_outputs=required_outputs,
+        confirm_recompute_stale=args.confirm_recompute_stale,
+    )
     rows = []
     for payload in results:
         aggregate = payload["aggregate"]
@@ -283,35 +446,23 @@ def _run_diagnostics(
 
 def _forecast_result_row(payload: dict[str, Any], control: dict[str, Any] | None) -> dict[str, Any]:
     dev = payload["development"]["global"]["WAPE"]
-    bench = payload["benchmark"]["global"]["WAPE"]
     row = {
         "candidate_id": payload["candidate"]["id"],
         "name": payload["candidate"]["name"],
         "family": payload["candidate"]["family"],
         "model": payload["model"],
         "development_WAPE": dev,
-        "benchmark_WAPE": bench,
         "development_BiasRatio": payload["development"]["global"]["BiasRatio"],
-        "benchmark_BiasRatio": payload["benchmark"]["global"]["BiasRatio"],
         "development_top_decile_WAPE": payload["development"]["top_actual_decile"][
-            "WAPE"
-        ],
-        "benchmark_top_decile_WAPE": payload["benchmark"]["top_actual_decile"][
             "WAPE"
         ],
     }
     if control is not None:
         control_dev = control["development"]["global"]["WAPE"]
-        control_bench = control["benchmark"]["global"]["WAPE"]
         row["development_relative_improvement"] = (control_dev - dev) / control_dev
-        row["benchmark_relative_change"] = (bench - control_bench) / control_bench
     else:
         row["development_relative_improvement"] = 0.0
-        row["benchmark_relative_change"] = 0.0
-    row["screen_score"] = (
-        row["development_relative_improvement"]
-        - 0.35 * max(0.0, row["benchmark_relative_change"])
-    )
+    row["development_selection_score"] = row["development_relative_improvement"]
     return row
 
 
@@ -323,17 +474,46 @@ def _rank_forecast_results(results: list[dict[str, Any]]) -> list[dict[str, Any]
     rows = [_forecast_result_row(payload, control) for payload in results]
     rows.sort(
         key=lambda row: (
-            row["benchmark_relative_change"] > 0.02,
-            -row["screen_score"],
+            -row["development_selection_score"],
             row["development_WAPE"],
+            row["candidate_id"],
         )
     )
+    return rows
+
+
+def _add_frozen_benchmark_reporting(
+    rows: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    by_id = {payload["candidate"]["id"]: payload for payload in results}
+    control = next(
+        (payload for payload in results if payload["candidate"]["family"] == "control"),
+        None,
+    )
+    control_wape = (
+        float(control["benchmark"]["global"]["WAPE"]) if control is not None else None
+    )
+    for row in rows:
+        benchmark = by_id[row["candidate_id"]]["benchmark"]
+        benchmark_wape = float(benchmark["global"]["WAPE"])
+        row.update({
+            "benchmark_WAPE": benchmark_wape,
+            "benchmark_BiasRatio": benchmark["global"]["BiasRatio"],
+            "benchmark_top_decile_WAPE": benchmark["top_actual_decile"]["WAPE"],
+            "benchmark_relative_change": (
+                (benchmark_wape - control_wape) / control_wape
+                if control_wape is not None and control_wape > 0
+                else 0.0
+            ),
+        })
     return rows
 
 
 def _run_forecast_candidates(
     root: Path,
     stage_name: str,
+    train: pd.DataFrame,
     candidates: list[dict[str, Any]],
     *,
     model: str,
@@ -348,11 +528,27 @@ def _run_forecast_candidates(
     dev_arg = ",".join(str(value.date()) for value in dev_origins)
     bench_arg = ",".join(str(value.date()) for value in bench_origins)
     seeds_arg = ",".join(str(value) for value in seeds)
+    expected_by_id = _forecast_fingerprints(
+        candidates,
+        train,
+        model=model,
+        epochs=epochs,
+        seeds=seeds,
+        dev_origins=dev_origins,
+        bench_origins=bench_origins,
+        device=args.device,
+    )
+    required_outputs = ("development_oof.parquet", "benchmark_oof.parquet")
     for index, item in enumerate(candidates, start=1):
         if _time_budget_exhausted(started, args.max_hours):
             break
         trial_dir = stage_dir / item["id"]
-        if _should_skip(trial_dir, args):
+        if _should_skip(
+            trial_dir,
+            args,
+            expected_by_id[item["id"]],
+            required_outputs=required_outputs,
+        ):
             continue
         candidate_path = _candidate_file(root, item)
         command = [
@@ -379,15 +575,25 @@ def _run_forecast_candidates(
         ]
         if args.resume:
             command.append("--resume")
+        if args.confirm_recompute_stale:
+            command.append("--confirm-recompute-stale")
         print(f"\n[{stage_name} {index}/{len(candidates)}] {item['name']} ({item['id']})")
         code = _run_command(
             command, log_path=trial_dir / "trial.log", dry_run=args.dry_run
         )
         if code != 0 and args.fail_fast:
             raise RuntimeError(f"{stage_name} candidate {item['id']} failed with exit {code}")
-    results = _load_completed_results(stage_dir)
+    results = _load_completed_results(
+        stage_dir,
+        expected_by_id,
+        required_outputs=required_outputs,
+        confirm_recompute_stale=args.confirm_recompute_stale,
+    )
     rows = _rank_forecast_results(results)
-    _write_csv(root / f"{stage_name}_leaderboard.csv", rows)
+    _write_csv(
+        root / f"{stage_name}_leaderboard.csv",
+        _add_frozen_benchmark_reporting(rows, results),
+    )
     return results
 
 
@@ -483,17 +689,14 @@ def _confirmation_recommendation(
         payload for payload in results if payload["candidate"]["family"] == "control"
     )
     control_dev = control["development"]["global"]["WAPE"]
-    control_bench = control["benchmark"]["global"]["WAPE"]
     control_top = control["development"]["top_actual_decile"]["WAPE"]
     comparisons = []
     for payload in results:
         if payload is control:
             continue
         dev = payload["development"]["global"]["WAPE"]
-        bench = payload["benchmark"]["global"]["WAPE"]
         top = payload["development"]["top_actual_decile"]["WAPE"]
         dev_improvement = (control_dev - dev) / control_dev
-        benchmark_change = (bench - control_bench) / control_bench
         top_change = (top - control_top) / control_top
         bootstrap = bootstrap_origin_improvement(
             _load_oof(control, "development"),
@@ -511,7 +714,6 @@ def _confirmation_recommendation(
             holiday_change = (candidate_holiday - control_holiday) / control_holiday
         passes = {
             "development": dev_improvement >= 0.002,
-            "benchmark": benchmark_change <= 0.02,
             "top_decile": top_change <= 0.03,
             "holiday_event": holiday_change <= 0.05,
             "bootstrap_probability": bootstrap[
@@ -522,9 +724,7 @@ def _confirmation_recommendation(
             {
                 "candidate": payload["candidate"],
                 "development_WAPE": dev,
-                "benchmark_WAPE": bench,
                 "development_relative_improvement": dev_improvement,
-                "benchmark_relative_change": benchmark_change,
                 "development_top_decile_relative_change": top_change,
                 "holiday_event_relative_change": holiday_change,
                 "bootstrap": bootstrap,
@@ -536,10 +736,20 @@ def _confirmation_recommendation(
     accepted.sort(
         key=lambda row: (
             -row["development_relative_improvement"],
-            row["benchmark_relative_change"],
+            row["development_top_decile_relative_change"],
+            -row["bootstrap"]["probability_improvement_positive"],
+            row["candidate"]["id"],
         )
     )
     winner = accepted[0]["candidate"] if accepted else control["candidate"]
+    control_bench = control["benchmark"]["global"]["WAPE"]
+    result_by_id = {item["candidate"]["id"]: item for item in results}
+    for row in comparisons:
+        benchmark_wape = result_by_id[row["candidate"]["id"]]["benchmark"]["global"]["WAPE"]
+        row["benchmark_WAPE"] = benchmark_wape
+        row["benchmark_relative_change"] = (
+            benchmark_wape - control_bench
+        ) / control_bench
     payload = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": _utc_now(),
@@ -552,11 +762,14 @@ def _confirmation_recommendation(
         },
         "gates": {
             "minimum_development_relative_improvement": 0.002,
-            "maximum_benchmark_relative_regression": 0.02,
             "maximum_top_decile_relative_regression": 0.03,
             "maximum_holiday_event_relative_regression": 0.05,
             "minimum_bootstrap_probability_positive": 0.75,
         },
+        "selection_protocol": (
+            "development_and_cross_fitted_development_only; "
+            "benchmark_is_frozen_reporting_only"
+        ),
         "comparisons": comparisons,
         "winner": winner,
         "promote_anomaly_layer": winner["family"] != "control",
@@ -590,10 +803,11 @@ def _write_report(root: Path, profile: SearchProfile, recommendation: dict[str, 
         "",
         "## Promotion gates",
         "",
-        "A candidate is promoted only if it improves development WAPE by at least 0.2%,",
-        "keeps recent-benchmark regression within 2%, does not regress top-demand-decile",
-        "WAPE by more than 3%, does not regress holiday/event WAPE by more than 5%, and",
+        "A candidate is promoted only from development evidence: it must improve",
+        "development WAPE by at least 0.2%, not regress development top-demand-decile",
+        "WAPE by more than 3%, not regress development holiday/event WAPE by more than 5%, and",
         "has at least 75% origin-bootstrap probability of a positive improvement.",
+        "The frozen benchmark is displayed after selection and is reporting-only.",
         "",
         "## Candidate comparison",
         "",
@@ -639,6 +853,21 @@ def main() -> None:
         "arguments": vars(args),
         "preflight": preflight,
         "autoencoder_candidates": ae_candidates,
+        "environment": environment_metadata(
+            requested_device=args.device,
+            resolved_device=preflight["resolved_device"],
+        ),
+        "artifact_fingerprint": artifact_fingerprint(
+            schema_version=SCHEMA_VERSION,
+            semantic={
+                "profile": asdict(profile),
+                "seed": args.seed,
+                "device": args.device,
+                "autoencoder_candidates": ae_candidates,
+            },
+            dataframes={"train": train},
+            source_paths=OVERNIGHT_SEARCH_SOURCE_PATHS,
+        ),
     }
     write_json(root / "manifest.json", manifest)
 
@@ -650,7 +879,29 @@ def main() -> None:
         if args.stage == "diagnostic" or _time_budget_exhausted(started, args.max_hours):
             return
     else:
-        diagnostic_results = _load_completed_results(root / "diagnostic")
+        diagnostic_cutoffs = _diagnostic_cutoffs(
+            train, profile.autoencoder_cutoffs
+        )
+        diagnostic_results = _load_completed_results(
+            root / "diagnostic",
+            _diagnostic_fingerprints(
+                ae_candidates,
+                train,
+                diagnostic_cutoffs,
+                profile.autoencoder_seeds,
+                args,
+            ),
+            required_outputs=(
+                tuple(
+                    f"scores_{cutoff.date()}_seed{seed}.parquet"
+                    for cutoff in diagnostic_cutoffs
+                    for seed in profile.autoencoder_seeds
+                )
+                if args.save_diagnostic_scores
+                else ()
+            ),
+            confirm_recompute_stale=args.confirm_recompute_stale,
+        )
 
     proxy_candidates = _generate_proxy_candidates(
         ae_candidates, diagnostic_results, profile, args.seed
@@ -661,6 +912,7 @@ def main() -> None:
         proxy_results = _run_forecast_candidates(
             root,
             "proxy",
+            train,
             proxy_candidates,
             model="DynamicRidge",
             dev_origins=development_origins(profile.proxy_development_origins),
@@ -679,6 +931,7 @@ def main() -> None:
             proxy_results = _run_forecast_candidates(
                 root,
                 "proxy",
+                train,
                 proxy_candidates,
                 model="DynamicRidge",
                 dev_origins=development_origins(profile.proxy_development_origins),
@@ -693,10 +946,26 @@ def main() -> None:
         if args.stage == "proxy" or _time_budget_exhausted(started, args.max_hours):
             return
     else:
-        proxy_results = _load_completed_results(root / "proxy")
         saved_proxy_candidates = root / "proxy_candidates.json"
         if saved_proxy_candidates.exists():
             proxy_candidates = load_json(saved_proxy_candidates)
+        proxy_dev = development_origins(profile.proxy_development_origins)
+        proxy_bench = benchmark_origins(
+            train, profile.proxy_benchmark_origins, selected_forecasting_config()
+        )
+        proxy_results = _load_forecast_stage(
+            root,
+            "proxy",
+            train,
+            proxy_candidates,
+            model="DynamicRidge",
+            epochs=1,
+            seeds=(42,),
+            dev_origins=proxy_dev,
+            bench_origins=proxy_bench,
+            device=args.device,
+            confirm_recompute_stale=args.confirm_recompute_stale,
+        )
 
     neural_candidates = _top_candidates(
         proxy_results, proxy_candidates, profile.neural_top, include_control=True
@@ -707,6 +976,7 @@ def main() -> None:
         neural_results = _run_forecast_candidates(
             root,
             "neural",
+            train,
             neural_candidates,
             model="NeuralNet",
             dev_origins=development_origins(profile.neural_development_origins),
@@ -721,10 +991,24 @@ def main() -> None:
         if args.stage == "neural" or _time_budget_exhausted(started, args.max_hours):
             return
     else:
-        neural_results = _load_completed_results(root / "neural")
         saved_neural = root / "neural_candidates.json"
         if saved_neural.exists():
             neural_candidates = load_json(saved_neural)
+        neural_results = _load_forecast_stage(
+            root,
+            "neural",
+            train,
+            neural_candidates,
+            model="NeuralNet",
+            epochs=profile.neural_epochs,
+            seeds=profile.neural_seeds,
+            dev_origins=development_origins(profile.neural_development_origins),
+            bench_origins=benchmark_origins(
+                train, profile.neural_benchmark_origins, selected_forecasting_config()
+            ),
+            device=args.device,
+            confirm_recompute_stale=args.confirm_recompute_stale,
+        )
 
     confirmation_candidates = _top_candidates(
         neural_results,
@@ -736,6 +1020,7 @@ def main() -> None:
     confirmation_results = _run_forecast_candidates(
         root,
         "confirmation",
+        train,
         confirmation_candidates,
         model="NeuralNet",
         dev_origins=development_origins(profile.confirmation_development_origins),

@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import pickle
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -100,6 +101,13 @@ from systemic_autoencoder_v2 import (
     attach_autoencoder_origin_features,
     build_cached_autoencoder_profile,
 )
+from artifact_provenance import (
+    artifact_fingerprint,
+    config_hash,
+    dataframe_content_hash,
+    neural_training_identity,
+    resolve_compute_device,
+)
 
 np.random.seed(CFG.seed)
 
@@ -135,6 +143,7 @@ class RuntimeOptions:
     selection_protocol: str = "global"
     resume: bool = False
     reset_checkpoints: bool = False
+    confirm_recompute_stale: bool = False
     checkpoint_dir: str = "outputs/checkpoints"
     nn_batch_size: str = "auto"
     nn_lr_scaling: str = "auto"
@@ -195,6 +204,11 @@ def parse_args(argv=None) -> RuntimeOptions:
     parser.add_argument(
         "--reset-checkpoints", action="store_true",
         help="Delete existing CV checkpoints before starting",
+    )
+    parser.add_argument(
+        "--confirm-recompute-stale",
+        action="store_true",
+        help="Deliberately replace stale, corrupt, or incompatible CV checkpoints",
     )
     parser.add_argument(
         "--checkpoint-dir", default="outputs/checkpoints",
@@ -349,6 +363,7 @@ def parse_args(argv=None) -> RuntimeOptions:
         selection_protocol=args.selection_protocol,
         resume=args.resume,
         reset_checkpoints=args.reset_checkpoints,
+        confirm_recompute_stale=args.confirm_recompute_stale,
         checkpoint_dir=args.checkpoint_dir,
         nn_batch_size=args.nn_batch_size,
         nn_lr_scaling=args.nn_lr_scaling,
@@ -785,7 +800,21 @@ def configure_nn_runtime(cfg: Config, options: RuntimeOptions) -> dict:
 
 TREE_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tree_worker.py")
 
-CHECKPOINT_SCHEMA_VERSION = "david-anomaly-direct-v2"
+CHECKPOINT_SCHEMA_VERSION = "fold-checkpoint-v4"
+_CHECKPOINT_SOURCE_PATHS = (
+    __file__,
+    os.path.join(os.path.dirname(__file__), "artifact_provenance.py"),
+    os.path.join(os.path.dirname(__file__), "framework.py"),
+    os.path.join(os.path.dirname(__file__), "ensemble.py"),
+    os.path.join(os.path.dirname(__file__), "anomaly_detection.py"),
+    os.path.join(os.path.dirname(__file__), "systemic_autoencoder_v2.py"),
+    os.path.join(os.path.dirname(__file__), "tree_worker.py"),
+    os.path.join(os.path.dirname(__file__), "models", "neural_net.py"),
+    os.path.join(os.path.dirname(__file__), "models", "naive_baselines.py"),
+    os.path.join(os.path.dirname(__file__), "models", "dynamic_ridge.py"),
+    os.path.join(os.path.dirname(__file__), "models", "xgboost_model.py"),
+    os.path.join(os.path.dirname(__file__), "models", "lightgbm_model.py"),
+)
 
 
 def _fold_checkpoint_path(
@@ -801,11 +830,13 @@ def _fold_checkpoint_path(
 
 
 def _fold_checkpoint_signature(
-    cfg: Config, strategy: str, origin_type: str, origin: pd.Timestamp
+    cfg: Config,
+    strategy: str,
+    origin_type: str,
+    origin: pd.Timestamp,
+    train_data: pd.DataFrame,
 ) -> dict:
     cfg_signature = asdict(cfg)
-    # The execution backend changes throughput, not the estimator definition.
-    cfg_signature.pop("nn_training_backend", None)
     # C5 is post-processing over already-produced member predictions and must
     # not invalidate otherwise identical expensive fold checkpoints.
     for name in (
@@ -816,18 +847,86 @@ def _fold_checkpoint_signature(
         "ensemble_benchmark_max_relative_regression",
     ):
         cfg_signature.pop(name, None)
-    return {
-        "schema_version": CHECKPOINT_SCHEMA_VERSION,
+    semantic = {
         "strategy": strategy,
         "origin_type": origin_type,
         "origin": pd.Timestamp(origin).isoformat(),
         "cfg": cfg_signature,
+        "neural_training_identity": neural_training_identity(cfg, device=DEVICE.type),
+        "autoencoder_device": resolve_compute_device(cfg.autoencoder_device),
     }
+    return artifact_fingerprint(
+        schema_version=CHECKPOINT_SCHEMA_VERSION,
+        semantic=semantic,
+        dataframes={"fold_train_raw": train_data},
+        source_paths=_CHECKPOINT_SOURCE_PATHS,
+    )
 
 
 def _checkpoint_signature_compatible(actual: dict, expected: dict) -> bool:
     """Require an exact semantic/training-policy checkpoint signature."""
     return actual == expected
+
+
+def _checkpoint_execution_identity(timing: dict) -> dict:
+    execution = {
+        "neural_ran": bool(timing.get("neural_ran", False)),
+        "neural_training_stats": timing.get("neural_training_stats", []),
+    }
+    return {
+        "schema_version": "checkpoint-execution-v1",
+        "sha256": config_hash(execution),
+        **execution,
+    }
+
+
+def _checkpoint_execution_valid(payload: dict, cfg: Config) -> bool:
+    execution = payload.get("execution_identity")
+    timing = payload.get("timing")
+    if not isinstance(execution, dict) or not isinstance(timing, dict):
+        return False
+    if execution != _checkpoint_execution_identity(timing):
+        return False
+    stats = execution["neural_training_stats"]
+    if not execution["neural_ran"]:
+        return stats == []
+    if not isinstance(stats, list) or len(stats) != len(cfg.seeds):
+        return False
+    expected = neural_training_identity(cfg, device=DEVICE.type)
+    allowed_backends = {expected["resolved_backend"]}
+    if expected["oom_fallback_policy"] == "device_resident_to_dataloader_on_oom":
+        allowed_backends.add("dataloader_fallback")
+    return all(
+        isinstance(row, dict)
+        and row.get("seed") == int(seed)
+        and row.get("device") == expected["device"]
+        and row.get("backend") in allowed_backends
+        and row.get("batch_size") == expected["batch_size"]
+        and row.get("reference_batch_size") == expected["reference_batch_size"]
+        for row, seed in zip(stats, cfg.seeds, strict=True)
+    )
+
+
+def _guard_checkpoint_overwrite(
+    checkpoint_dir: str | None,
+    strategy: str,
+    origin_type: str,
+    origin: pd.Timestamp,
+    *,
+    resume: bool,
+    confirm_recompute_stale: bool,
+) -> None:
+    path = _fold_checkpoint_path(checkpoint_dir, strategy, origin_type, origin)
+    if (
+        path is not None
+        and os.path.exists(path)
+        and not resume
+        and not confirm_recompute_stale
+    ):
+        raise RuntimeError(
+            f"Refusing to overwrite expensive checkpoint {path} without validation. "
+            "Use --resume or pass --confirm-recompute-stale for a deliberate rerun."
+        )
 
 
 def _load_fold_checkpoint(
@@ -836,6 +935,9 @@ def _load_fold_checkpoint(
     origin_type: str,
     origin: pd.Timestamp,
     cfg: Config,
+    train_data: pd.DataFrame,
+    *,
+    confirm_recompute_stale: bool = False,
 ) -> dict | None:
     path = _fold_checkpoint_path(checkpoint_dir, strategy, origin_type, origin)
     if path is None or not os.path.exists(path):
@@ -844,15 +946,57 @@ def _load_fold_checkpoint(
         with open(path, "rb") as f:
             payload = pickle.load(f)
     except Exception as exc:
-        print(f"    [checkpoint] ignoring unreadable {path}: {exc}")
+        reason = f"unreadable checkpoint: {exc}"
+        if not confirm_recompute_stale:
+            raise RuntimeError(
+                f"Stale or unverifiable expensive checkpoint {path}: {reason}. "
+                "Pass --confirm-recompute-stale to deliberately retrain it."
+            ) from exc
+        print(f"    [checkpoint] confirmed recompute of {path}: {reason}")
         return None
-    expected = _fold_checkpoint_signature(cfg, strategy, origin_type, origin)
+    if not isinstance(payload, dict):
+        if not confirm_recompute_stale:
+            raise RuntimeError(
+                f"Stale or unverifiable expensive checkpoint {path}. "
+                "Pass --confirm-recompute-stale to deliberately retrain it."
+            )
+        print(f"    [checkpoint] confirmed recompute of invalid checkpoint {path}")
+        return None
+    expected = _fold_checkpoint_signature(
+        cfg, strategy, origin_type, origin, train_data
+    )
     if not _checkpoint_signature_compatible(payload.get("signature") or {}, expected):
-        print(f"    [checkpoint] ignoring stale checkpoint {path}")
+        if not confirm_recompute_stale:
+            raise RuntimeError(
+                f"Stale expensive checkpoint {path}. Pass "
+                "--confirm-recompute-stale to deliberately retrain it."
+            )
+        print(f"    [checkpoint] confirmed recompute of stale checkpoint {path}")
         return None
     frame = payload.get("oof")
     if not isinstance(frame, pd.DataFrame) or frame.empty:
-        print(f"    [checkpoint] ignoring invalid checkpoint {path}")
+        if not confirm_recompute_stale:
+            raise RuntimeError(
+                f"Invalid expensive checkpoint {path}. Pass "
+                "--confirm-recompute-stale to deliberately retrain it."
+            )
+        print(f"    [checkpoint] confirmed recompute of invalid checkpoint {path}")
+        return None
+    if payload.get("oof_content_hash") != dataframe_content_hash(frame):
+        if not confirm_recompute_stale:
+            raise RuntimeError(
+                f"Corrupt expensive checkpoint {path}. Pass "
+                "--confirm-recompute-stale to deliberately retrain it."
+            )
+        print(f"    [checkpoint] confirmed recompute of corrupt checkpoint {path}")
+        return None
+    if not _checkpoint_execution_valid(payload, cfg):
+        if not confirm_recompute_stale:
+            raise RuntimeError(
+                f"Unverifiable checkpoint execution identity {path}. Pass "
+                "--confirm-recompute-stale to deliberately retrain it."
+            )
+        print(f"    [checkpoint] confirmed recompute of execution-mismatched {path}")
         return None
     return payload
 
@@ -863,6 +1007,7 @@ def _save_fold_checkpoint(
     origin_type: str,
     origin: pd.Timestamp,
     cfg: Config,
+    train_data: pd.DataFrame,
     oof: pd.DataFrame,
     timing: dict,
 ) -> None:
@@ -871,9 +1016,13 @@ def _save_fold_checkpoint(
         return
     os.makedirs(os.path.dirname(path), exist_ok=True)
     payload = {
-        "signature": _fold_checkpoint_signature(cfg, strategy, origin_type, origin),
+        "signature": _fold_checkpoint_signature(
+            cfg, strategy, origin_type, origin, train_data
+        ),
+        "oof_content_hash": dataframe_content_hash(oof),
         "oof": oof,
         "timing": timing,
+        "execution_identity": _checkpoint_execution_identity(timing),
     }
     tmp_path = f"{path}.tmp-{os.getpid()}"
     with open(tmp_path, "wb") as f:
@@ -1116,6 +1265,7 @@ def run_walk_forward_cv_direct(
     hist_df: pd.DataFrame, origins, origin_type: str, cfg: Config = CFG,
     timings: list[dict] | None = None, *, checkpoint_dir: str | None = None,
     resume: bool = False,
+    confirm_recompute_stale: bool = False,
     run_neural: bool = True,
     structured_models: tuple[str, ...] | None = None,
 ) -> pd.DataFrame:
@@ -1156,10 +1306,19 @@ def run_walk_forward_cv_direct(
         fold_eval_raw = hist_df[(hist_df["DateKey"] >= eval_start) & (hist_df["DateKey"] <= eval_end)].copy()
         if fold_train_raw.empty or fold_eval_raw.empty:
             continue
+        _guard_checkpoint_overwrite(
+            checkpoint_dir,
+            "direct",
+            origin_type,
+            origin,
+            resume=resume,
+            confirm_recompute_stale=confirm_recompute_stale,
+        )
 
         if resume:
             cached = _load_fold_checkpoint(
-                checkpoint_dir, "direct", origin_type, origin, cfg
+                checkpoint_dir, "direct", origin_type, origin, cfg, fold_train_raw,
+                confirm_recompute_stale=confirm_recompute_stale,
             )
             if cached is not None:
                 print(
@@ -1204,6 +1363,7 @@ def run_walk_forward_cv_direct(
         eval_panel = panel[panel["OriginDateKey"] == origin].reset_index(drop=True)
 
         seed_preds: dict[int, np.ndarray] = {}
+        nn_training_stats: list[dict] = []
         ensemble_output = None
         nn_seconds = 0.0
         if run_neural:
@@ -1211,12 +1371,20 @@ def run_walk_forward_cv_direct(
             tensors = make_tensors(train_panel, scaler, fit=True, cfg=cfg)
             y_target = neural_training_target(train_panel, cfg)
             nn_start = time.perf_counter()
-            seed_models = [
-                train_model(
-                    tensors, y_target, cfg, epochs=cfg.cv_epochs, seed=seed
+            seed_models = []
+            for seed in cfg.seeds:
+                stats: dict = {}
+                seed_models.append(
+                    train_model(
+                        tensors,
+                        y_target,
+                        cfg,
+                        epochs=cfg.cv_epochs,
+                        seed=seed,
+                        stats_out=stats,
+                    )
                 )
-                for seed in cfg.seeds
-            ]
+                nn_training_stats.append({"seed": int(seed), **stats})
             nn_seconds = time.perf_counter() - nn_start
             seed_preds = {
                 seed: predict_direct([model], scaler, eval_panel, cfg)
@@ -1343,13 +1511,22 @@ def run_walk_forward_cv_direct(
             "nn_seconds": round(nn_seconds, 2),
             "tree_seconds": round(tree_seconds, 2),
             "fold_seconds": round(fold_seconds, 2),
+            "neural_ran": bool(run_neural),
+            "neural_training_stats": nn_training_stats,
         }
         print(f"    [timing] {origin_type} {origin.date()}: NN {nn_seconds:.1f}s | "
               f"trees {tree_seconds:.1f}s | fold total {fold_seconds:.1f}s")
         if timings is not None:
             timings.append(timing_record)
         _save_fold_checkpoint(
-            checkpoint_dir, "direct", origin_type, origin, cfg, fold_oof, timing_record
+            checkpoint_dir,
+            "direct",
+            origin_type,
+            origin,
+            cfg,
+            fold_train_raw,
+            fold_oof,
+            timing_record,
         )
 
     return pd.concat(fold_frames, ignore_index=True) if fold_frames else pd.DataFrame()
@@ -1380,11 +1557,27 @@ def _recursive_nn_predictions(
     first_available: pd.Series,
     cfg: Config,
     epochs: int,
+    *,
+    training_stats_out: list[dict] | None = None,
 ):
     scaler = make_numeric_preprocessor()
     tensors = make_tensors(train_panel, scaler, fit=True, cfg=cfg)
     y_target = neural_training_target(train_panel, cfg)
-    seed_models = [train_model(tensors, y_target, cfg, epochs=epochs, seed=seed) for seed in cfg.seeds]
+    seed_models = []
+    for seed in cfg.seeds:
+        stats: dict = {}
+        seed_models.append(
+            train_model(
+                tensors,
+                y_target,
+                cfg,
+                epochs=epochs,
+                seed=seed,
+                stats_out=stats,
+            )
+        )
+        if training_stats_out is not None:
+            training_stats_out.append({"seed": int(seed), **stats})
 
     seed_paths = {}
     # Diagnostics: each seed gets its own path. The deployed ensemble path below
@@ -1413,6 +1606,7 @@ def run_walk_forward_cv_recursive(
     hist_df: pd.DataFrame, origins, origin_type: str, cfg: Config = CFG,
     timings: list[dict] | None = None, *, checkpoint_dir: str | None = None,
     resume: bool = False,
+    confirm_recompute_stale: bool = False,
 ) -> pd.DataFrame:
     """One-step training plus genuine recursive seven-day inference."""
     fold_frames = []
@@ -1424,9 +1618,23 @@ def run_walk_forward_cv_recursive(
         fold_eval_raw = hist_df[hist_df["DateKey"].between(eval_start, eval_end)].copy()
         if fold_train_raw.empty or fold_eval_raw.empty:
             continue
+        _guard_checkpoint_overwrite(
+            checkpoint_dir,
+            "recursive",
+            origin_type,
+            origin,
+            resume=resume,
+            confirm_recompute_stale=confirm_recompute_stale,
+        )
         if resume:
             cached = _load_fold_checkpoint(
-                checkpoint_dir, "recursive", origin_type, origin, cfg
+                checkpoint_dir,
+                "recursive",
+                origin_type,
+                origin,
+                cfg,
+                fold_train_raw,
+                confirm_recompute_stale=confirm_recompute_stale,
             )
             if cached is not None:
                 print(
@@ -1446,9 +1654,11 @@ def run_walk_forward_cv_recursive(
         future_covariates = sanitize_future_covariates(fold_eval_raw)
 
         nn_start = time.perf_counter()
+        nn_training_stats: list[dict] = []
         ensemble_path, seed_paths, _, _ = _recursive_nn_predictions(
             train_panel, fold_train_raw, future_covariates, price_ref,
-            first_seen, first_available, cfg, cfg.cv_epochs
+            first_seen, first_available, cfg, cfg.cv_epochs,
+            training_stats_out=nn_training_stats,
         )
         nn_seconds = time.perf_counter() - nn_start
 
@@ -1563,6 +1773,8 @@ def run_walk_forward_cv_recursive(
             "nn_seconds": round(nn_seconds, 2),
             "tree_seconds": round(tree_seconds, 2),
             "fold_seconds": round(fold_seconds, 2),
+            "neural_ran": True,
+            "neural_training_stats": nn_training_stats,
         }
         print(
             f"    [timing] {origin_type}/recursive {origin.date()}: "
@@ -1572,7 +1784,14 @@ def run_walk_forward_cv_recursive(
         if timings is not None:
             timings.append(timing_record)
         _save_fold_checkpoint(
-            checkpoint_dir, "recursive", origin_type, origin, cfg, fold_oof, timing_record
+            checkpoint_dir,
+            "recursive",
+            origin_type,
+            origin,
+            cfg,
+            fold_train_raw,
+            fold_oof,
+            timing_record,
         )
     return pd.concat(fold_frames, ignore_index=True) if fold_frames else pd.DataFrame()
 
@@ -1582,17 +1801,20 @@ def run_walk_forward_cv(
     timings: list[dict] | None = None,
     strategy: ForecastStrategy | str = ForecastStrategy.DIRECT, *,
     checkpoint_dir: str | None = None, resume: bool = False,
+    confirm_recompute_stale: bool = False,
 ) -> pd.DataFrame:
     strategy = ForecastStrategy(strategy)
     if strategy is ForecastStrategy.DIRECT:
         return run_walk_forward_cv_direct(
             hist_df, origins, origin_type, cfg, timings,
             checkpoint_dir=checkpoint_dir, resume=resume,
+            confirm_recompute_stale=confirm_recompute_stale,
         )
     if strategy is ForecastStrategy.RECURSIVE:
         return run_walk_forward_cv_recursive(
             hist_df, origins, origin_type, cfg, timings,
             checkpoint_dir=checkpoint_dir, resume=resume,
+            confirm_recompute_stale=confirm_recompute_stale,
         )
     raise ValueError("run_walk_forward_cv accepts one concrete strategy, not 'both'")
 
@@ -2271,10 +2493,22 @@ def run_final_forecast_direct(
     y_target = neural_training_target(train_panel, cfg)
 
     models = []
+    training_execution = []
     for seed in cfg.seeds:
         seed_start = time.perf_counter()
         print(f"    seed {seed}")
-        models.append(train_model(tensors, y_target, cfg, epochs=cfg.final_epochs, seed=seed))
+        stats: dict = {}
+        models.append(
+            train_model(
+                tensors,
+                y_target,
+                cfg,
+                epochs=cfg.final_epochs,
+                seed=seed,
+                stats_out=stats,
+            )
+        )
+        training_execution.append({"seed": int(seed), **stats})
         print(f"      [timing] seed {seed}: {time.perf_counter() - seed_start:.1f}s")
 
     output = predict_direct(
@@ -2288,7 +2522,10 @@ def run_final_forecast_direct(
     if not return_diagnostics:
         return submission, preds_aligned
 
-    diagnostics = {"prediction": preds_aligned}
+    diagnostics = {
+        "prediction": preds_aligned,
+        "training_execution": training_execution,
+    }
     for key in ("app_share", "prediction_app", "prediction_web"):
         if key in output:
             diagnostics[key] = _reindex_predictions(
@@ -3010,6 +3247,19 @@ def main(argv=None) -> None:
     if options.reset_checkpoints and os.path.exists(options.checkpoint_dir):
         shutil.rmtree(options.checkpoint_dir)
         print(f"Removed checkpoints: {options.checkpoint_dir}")
+    if (
+        not options.resume
+        and not options.reset_checkpoints
+        and not options.confirm_recompute_stale
+        and os.path.isdir(options.checkpoint_dir)
+        and any(Path(options.checkpoint_dir).rglob("*.pkl"))
+    ):
+        raise RuntimeError(
+            f"Existing fold checkpoints under {options.checkpoint_dir} would be "
+            "recomputed. Use --resume to validate/reuse them, "
+            "--reset-checkpoints to deliberately delete them, or "
+            "--confirm-recompute-stale to deliberately replace them."
+        )
     if options.resume:
         print(f"CV resume enabled: {options.checkpoint_dir}")
     run_start = time.perf_counter()
@@ -3032,6 +3282,7 @@ def main(argv=None) -> None:
             train_raw, DEVELOPMENT_ORIGINS, "development", cfg,
             timings=timings["cv_folds"], strategy=strategy,
             checkpoint_dir=options.checkpoint_dir, resume=options.resume,
+            confirm_recompute_stale=options.confirm_recompute_stale,
         )
         dev_frames.append(dev)
         print(f"\n=== {strategy.value.upper()} recent-benchmark CV ===")
@@ -3039,6 +3290,7 @@ def main(argv=None) -> None:
             train_raw, benchmark_origins, "recent_benchmark", cfg,
             timings=timings["cv_folds"], strategy=strategy,
             checkpoint_dir=options.checkpoint_dir, resume=options.resume,
+            confirm_recompute_stale=options.confirm_recompute_stale,
         )
         benchmark_frames.append(benchmark)
 

@@ -1,13 +1,13 @@
-# Weekend-v2: specialist, ensemble, and regime search
+# Weekend-v2 methodology: specialist, ensemble, and regime search
 
 ## Purpose
 
-The first overnight search established two facts:
+The provenance-limited overnight report suggested two hypotheses:
 
-1. no anomaly candidate was robust enough to replace the canonical NeuralNet by itself;
-2. the confirmed anomaly candidates made sufficiently different errors that a leakage-safe blend improved both development and recent-benchmark WAPE.
+1. no standalone anomaly candidate beat the canonical NeuralNet control;
+2. a non-nested preflight blend appeared complementary, but its confidence interval crossed zero.
 
-Weekend-v2 therefore does **not** ask only whether `anomaly_mode=both` wins as a standalone model. It asks whether anomaly-derived models are useful specialists inside a cross-fitted mixture, whether their value is SKU-, horizon-, or regime-specific, and whether unusual observations should be downweighted, preserved, or emphasized.
+Weekend-v2 was not run. The proposed protocol asks whether anomaly-derived models are useful specialists inside a nested, cross-fitted mixture. The current recommendation remains the control with `anomaly_mode=off`.
 
 The frozen final-audit origins remain excluded from all search and selection.
 
@@ -24,7 +24,7 @@ The development-origin bootstrap estimated `P(improvement > 0) = 95.74%`. The fu
 
 A constrained gate that allowed the statistical specialist to contribute at most 85% only when it predicted an error advantage produced 1.302% development improvement and 2.943% recent-benchmark improvement. This is evidence for **conditional specialist value**, not evidence that anomaly mode should become the universal model.
 
-See [`../reports/WEEKEND_V2_PREFLIGHT.md`](../reports/WEEKEND_V2_PREFLIGHT.md).
+See [`../WEEKEND_V2_PREFLIGHT.md`](../WEEKEND_V2_PREFLIGHT.md).
 
 ## Why anomaly mode is retained
 

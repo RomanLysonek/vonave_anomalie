@@ -1,8 +1,11 @@
-# Weekend-v2 preflight from the completed overnight artifacts
+# Weekend-v2 non-nested, provenance-limited preflight
 
 ## Source
 
-This analysis used the uploaded `outputs/overnight_anomaly_search` artifacts, including row-level development and recent-benchmark OOF predictions for:
+This historical analysis used uploaded `outputs/overnight_anomaly_search`
+artifacts that are no longer checked in. Their provenance cannot now be fully
+verified. The result is non-nested motivation only, not canonical model-selection
+evidence. The uploaded rows covered:
 
 - `cont-062b09b48747` — canonical NeuralNet control;
 - `stat-322e3ec6f7ee` — `stat_019_both_rw90`;
@@ -55,7 +58,8 @@ mean relative improvement: 1.451%
 P(improvement > 0):       95.74%
 ```
 
-The interval still touches zero because only 12 development origins exist, but the evidence is strong enough to justify a properly nested weekend search.
+The interval crosses zero and only 12 development origins exist. The estimate
+is uncertain and does not justify promotion.
 
 ## Alternative structures on the same prior OOF
 
@@ -65,9 +69,12 @@ The interval still touches zero because only 12 development origins exist, but t
 | Product-shrunk convex | 0.860% | 3.007% |
 | Statistical specialist gate, max 85% | 1.302% | 2.943% |
 
-The specialist gate also improved top-decile WAPE by 1.99% on development and 4.10% on the recent benchmark. This supports the hypothesis that anomaly mode has value **conditionally**, not necessarily as a universal model.
+The specialist gate also improved top-decile WAPE by 1.99% on development and 4.10% on the recent benchmark. This motivated a conditional specialist hypothesis but did not establish it.
 
-## Consequence for weekend-v2
+## Proposed consequence for weekend-v2
+
+Weekend-v2 was not run. The control with `anomaly_mode=off` remains the current
+recommendation.
 
 The next search must:
 

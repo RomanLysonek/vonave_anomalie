@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NOTINO / Interview Assignment — Anomaly Research</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css?v=22" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <nav class="suite-shell" aria-label="Interview assignment suite">
+    <strong>NOTINO / Interview Assignment</strong>
+    <div>
+      <a href="https://romanlysonek.github.io/vonava_predikce/">Classical Forecasting</a>
+      <a href="https://romanlysonek.github.io/vonave_anomalie/" aria-current="page">Anomaly Research</a>
+      <a href="https://romanlysonek.github.io/vonavy_chronos/">Chronos-2 Challenger</a>
+    </div>
+  </nav>
+
+  <div class="promo-bar">
+    <a class="promo-dataset-link" data-dataset-link href="dataset.html" title="The data structure and the modeling decisions it forced">30 Product Time Series</a>
+    <span id="promo-strategy">7-Day Forecast</span>
+    <span id="promo-model-count">Research Models Compared</span>
+    <a class="promo-evaluation-link" data-evaluation-link href="evaluation.html" title="Rolling forecast origins; not the same thing as recursive inference">Walk-Forward Validated</a>
+  </div>
+
+  <header class="hero">
+    <div class="hero-top">
+      <div class="brand">
+        <span class="brand-logo">NOTINO</span>
+        <span class="brand-tagline anomaly-brand-tagline">ANOMALY RESEARCH</span>
+      </div>
+      <div class="hero-title-block"><h1>Forecast + Anomaly Research Dashboard</h1></div>
+    </div>
+    <nav class="site-nav" id="site-nav"></nav>
+  </header>
+
+  <header class="model-hero page-description-strip" style="--mc:#b76600">
+    <span class="model-badge">Research snapshot</span>
+    <h1>Anomaly Research</h1>
+    <p class="blurb">A static, content-addressed review of unlabelled threshold exceedances and their measured forecasting contribution.</p>
+  </header>
+
+  <main id="app" class="anomaly-app">
+    <section class="snapshot-banner" id="snapshot-banner" aria-live="polite">
+      <strong>Loading published snapshot…</strong>
+    </section>
+
+    <section class="anomaly-intro">
+      <div>
+        <h2>No anomaly truth labels exist</h2>
+        <p>Threshold exceedances are review signals, not truth-labelled anomalies. Known campaign and event rows are explanatory proxies, not labels. This is not a validated anomaly detector.</p>
+      </div>
+      <div class="anomaly-decision-card" id="anomaly-decision-card">
+        <span class="status-dot status-running" aria-hidden="true"></span>
+        <div>
+          <strong id="anomaly-decision-title">Loading current recommendation…</strong>
+          <p id="anomaly-decision-copy"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="kpi-grid anomaly-kpi-grid" id="anomaly-kpi-grid" aria-label="Audit summary"></section>
+
+    <section class="panel">
+      <div class="panel-header row">
+        <div>
+          <h2>Product threshold-exceedance explorer</h2>
+          <p>Observed demand, causal expectation and calibrated score from the checked-in audit.</p>
+        </div>
+        <div class="controls">
+          <div class="control-group">
+            <label for="anomaly-range-select">History</label>
+            <select id="anomaly-range-select">
+              <option value="180">Last 180 days</option>
+              <option value="365" selected>Last 365 days</option>
+              <option value="730">Last 730 days</option>
+              <option value="all">All history</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="anomaly-product-select">Product</label>
+            <select id="anomaly-product-select"></select>
+          </div>
+        </div>
+      </div>
+      <div class="anomaly-product-summary" id="anomaly-product-summary"></div>
+      <div class="chart-wrap anomaly-chart-tall"><canvas id="chart-product-anomalies"></canvas></div>
+      <div class="diagnostic-note compact">Amber marks score exceedances for review. Event context can explain a row; it does not turn that row into a labelled anomaly.</div>
+      <div class="table-wrap">
+        <table class="data-table" id="product-anomaly-table">
+          <thead><tr><th>Date</th><th>Actual</th><th>Expected</th><th>Score</th><th>Context</th><th>Training weight</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel-grid anomaly-two-column">
+      <section class="panel">
+        <div class="panel-header"><h2>Market-level review timeline</h2><p>Daily demand and count of product-level threshold exceedances.</p></div>
+        <div class="chart-wrap anomaly-chart-tall"><canvas id="chart-systemic-timeline"></canvas></div>
+      </section>
+      <section class="panel">
+        <div class="panel-header"><h2>Highest scores</h2><p>Review queue only; no ground-truth classification is implied.</p></div>
+        <div class="table-wrap anomaly-scroll-table">
+          <table class="data-table" id="top-local-table">
+            <thead><tr><th>Product</th><th>Date</th><th>Actual</th><th>Expected</th><th>Score</th><th>Context</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel-grid anomaly-two-column">
+      <section class="panel">
+        <div class="panel-header"><h2>Future-known context</h2><p>Price, campaign and calendar diagnostics only—never future sales.</p></div>
+        <div class="chart-wrap"><canvas id="chart-context-risk"></canvas></div>
+        <div class="diagnostic-note compact" id="context-risk-note"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-header"><h2>Evidence availability</h2><p>Unsupported result trees are never inferred.</p></div>
+        <div class="evidence-list" id="evidence-list"></div>
+      </section>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header"><h2>Weekend-v2 preflight</h2><p>Motivation only, not a final model-selection result.</p></div>
+      <div class="diagnostic-note" id="weekend-preflight-note"></div>
+    </section>
+  </main>
+
+  <footer><p>Control / <code>anomaly_mode=off</code> is the current recommendation.</p></footer>
+  <script src="/static/common.js?v=16"></script>
+  <script src="/static/anomalies.js?v=3"></script>
+</body>
+</html>

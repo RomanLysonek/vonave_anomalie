@@ -20,6 +20,12 @@ from scipy.stats import spearmanr
 from anomaly_search_common import load_json, write_json
 from framework import Config, load_raw
 from systemic_autoencoder_v2 import AutoencoderV2Config, fit_score_systemic_autoencoder_v2
+from artifact_provenance import (
+    diagnostic_trial_fingerprint,
+    environment_metadata,
+    output_fingerprints,
+    result_body_manifest,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -240,6 +246,14 @@ def main() -> None:
     cutoffs = [pd.Timestamp(token) for token in args.cutoffs.split(",") if token]
     seeds = [int(token) for token in args.seeds.split(",") if token]
     train, _ = load_raw(Config())
+    fingerprint = diagnostic_trial_fingerprint(
+        candidate=candidate,
+        train_data=train,
+        cutoffs=cutoffs,
+        seeds=seeds,
+        device=args.device,
+        save_scores=args.save_scores,
+    )
 
     run_metrics: list[dict] = []
     score_frames: list[pd.DataFrame] = []
@@ -267,21 +281,37 @@ def main() -> None:
             raise RuntimeError("No diagnostic runs were executed")
         aggregate = _aggregate(run_metrics, score_frames)
         payload = {
-            "schema_version": "autoencoder-diagnostic-v1",
+            "schema_version": "autoencoder-diagnostic-v3",
             "candidate": candidate,
             "cutoffs": [str(value.date()) for value in cutoffs],
             "seeds": seeds,
             "runs": run_metrics,
             "aggregate": aggregate,
             "status": "complete",
+            "environment": environment_metadata(requested_device=args.device),
+        }
+        payload["artifact_manifest"] = {
+            "fingerprint": fingerprint,
+            "outputs": output_fingerprints(
+                    output,
+                    (
+                        f"scores_{cutoff.date()}_seed{seed}.parquet"
+                        for cutoff in cutoffs
+                        for seed in seeds
+                    )
+                    if args.save_scores
+                    else (),
+                ),
+            "result_body": result_body_manifest(payload),
         }
         write_json(result_path, payload)
         print(json.dumps(payload["aggregate"], indent=2))
     except Exception as exc:
         failure = {
-            "schema_version": "autoencoder-diagnostic-v1",
+            "schema_version": "autoencoder-diagnostic-v3",
             "candidate": candidate,
             "status": "failed",
+            "fingerprint": fingerprint,
             "error": repr(exc),
             "traceback": traceback.format_exc(),
         }

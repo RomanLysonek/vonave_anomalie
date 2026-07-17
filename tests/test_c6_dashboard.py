@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from dashboard_artifacts import (
     collect_ablation_showcase,
@@ -10,6 +11,7 @@ from dashboard_artifacts import (
     summarize_per_product_oof,
     summarize_top_deciles,
 )
+from ml.publish_site import _assert_replace_safe
 
 
 PREDICTIONS = {"NeuralNet": "pred_NeuralNet", "XGBoost": "pred_XGBoost"}
@@ -58,30 +60,38 @@ def test_ablation_showcase_marks_recommendations(tmp_path):
     assert result.loc[result["candidate"].eq("winner"), "selected"].all()
 
 
-def test_static_dashboard_is_self_contained(tmp_path):
-    static = tmp_path / "webapp" / "static"
-    outputs = tmp_path / "outputs"
-    static.mkdir(parents=True)
-    outputs.mkdir()
-    (static / "index.html").write_text('<link href="/static/styles.css"><script src="/static/common.js?v=1"></script>')
-    (static / "model.html").write_text('<script src="/static/common.js?v=1"></script>')
-    (static / "evaluation.html").write_text('<script src="/static/common.js?v=1"></script><script src="/static/evaluation.js?v=1"></script>')
-    (static / "dataset.html").write_text('<script src="/static/common.js?v=1"></script><script src="/static/dataset.js?v=1"></script>')
-    (static / "common.js").write_text("function ok() {}")
-    (static / "evaluation.js").write_text("function evaluation() {}")
-    (static / "dataset.js").write_text("function dataset() {}")
-    (static / "styles.css").write_text("body{}")
-    results = outputs / "results.json"
-    results.write_text(json.dumps({"selection": {"canonical_model": "NeuralNet"}}))
+def test_static_dashboard_refuses_unowned_docs_files(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    generated = docs / "index.html"
+    generated.write_text("generated")
+    (docs / "site-manifest.json").write_text(json.dumps({
+        "files": [{"path": "index.html", "sha256": "not-used-for-ownership"}],
+    }))
+    (docs / "authored-notes.md").write_text("must survive")
 
-    manifest = publish_static_dashboard(tmp_path, results)
-    assert (tmp_path / "docs" / "index.html").exists()
-    assert (tmp_path / "docs" / "evaluation.html").exists()
-    assert (tmp_path / "docs" / "evaluation.js").exists()
-    assert (tmp_path / "docs" / "dataset.html").exists()
-    assert (tmp_path / "docs" / "dataset.js").exists()
-    html = (tmp_path / "docs" / "index.html").read_text()
-    assert 'window.STATIC_DASHBOARD = true' in html
-    assert './styles.css' in html
-    assert (tmp_path / "docs" / "results.json").exists()
-    assert manifest["entrypoint"] == "docs/index.html"
+    with pytest.raises(RuntimeError, match="unowned files"):
+        _assert_replace_safe(docs)
+
+
+def test_checked_in_docs_are_generated_and_manifest_owned():
+    root = Path(__file__).resolve().parents[1]
+    docs = root / "docs"
+    manifest = json.loads((docs / "site-manifest.json").read_text())
+    owned = {row["path"] for row in manifest["files"]} | {"site-manifest.json"}
+    actual = {
+        path.relative_to(docs).as_posix()
+        for path in docs.rglob("*")
+        if path.is_file()
+    }
+    assert actual == owned
+    assert (docs / "data" / "results.json").is_file()
+    assert (docs / "data" / "anomaly-dashboard-v2.json").is_file()
+    assert len(list((docs / "data" / "anomaly-products-v2").glob("product-*.json"))) == 30
+
+
+def test_pages_checkout_does_not_persist_credentials():
+    workflow = (
+        Path(__file__).resolve().parents[1] / ".github" / "workflows" / "pages.yml"
+    ).read_text()
+    assert "persist-credentials: false" in workflow

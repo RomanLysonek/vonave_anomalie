@@ -17,7 +17,7 @@ The executable search space is defined in `ml/anomaly_search_common.py` so every
 
 ## Autoencoder detector dimensions
 
-See `docs/OVERNIGHT_ANOMALY_SEARCH.md` for representations and architectures. The autoencoder search is deliberately broader than the action search: several models may produce informative continuous state while their binary threshold is poor. Therefore `features` and `both` are evaluated independently after diagnostic ranking.
+See `reports/methodology/OVERNIGHT_ANOMALY_SEARCH.md` for representations and architectures. The autoencoder search is deliberately broader than the action search: several models may produce informative continuous state while their binary threshold is poor. Therefore `features` and `both` are evaluated independently after diagnostic ranking.
 
 ## Hybrid policy
 

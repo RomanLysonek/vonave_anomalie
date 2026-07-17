@@ -2,43 +2,51 @@
 
 **DAVID-informed anomaly-aware extension of the `vonava_predikce` retail demand forecaster.**
 
-This repository does not pretend that anomaly detection magically creates signal in a small forecasting dataset. It transfers the parts of DAVID that are statistically useful here—reconstruction error, EVT/POT tail calibration, temporal windows, and a clean separation between detection and action—into the existing leakage-safe direct forecasting pipeline.
+This repository does not treat unlabelled threshold exceedances as anomaly ground truth. It transfers selected DAVID concepts—reconstruction error, EVT/POT tail calibration, temporal windows, and separation between detection and action—into the existing leakage-safe forecasting pipeline for controlled evaluation.
 
 The original forecasting implementation and its detailed documentation are preserved in [`FORECAST_BASELINE.md`](FORECAST_BASELINE.md). The design audit is in [`reports/DAVID_TRANSFER_AUDIT.md`](reports/DAVID_TRANSFER_AUDIT.md), and an interview-ready explanation is in [`reports/INTERVIEW_TALK_TRACK.md`](reports/INTERVIEW_TALK_TRACK.md).
 
 ## Current status
 
-- The original submission behavior is unchanged by default: `anomaly_mode="off"`.
+- **Current recommendation:** retain the control with `anomaly_mode="off"`.
+- No anomaly truth labels exist. Known campaign/event rows are explanatory proxies, not labels, so this is not a validated anomaly detector.
 - The anomaly layer is integrated into direct walk-forward CV and final direct training.
 - New anomaly code has synthetic leakage, alignment, threshold, protection, and integration tests.
-- The real-data statistical audit, two real autoencoder trainings, and a low-memory held-out forecast-weight ablation have now been executed.
+- The checked-in statistical audit is canonical descriptive evidence. Legacy compact-autoencoder outputs are excluded because preprocessing used future-derived medians; V2 is the only supported leakage-safe path.
 - The weighting ablation selected the control: soft weighting worsened development WAPE by 0.0918% and recent-benchmark WAPE by 0.1719%; default weighting worsened them by 0.2679% and 0.3398%.
 - The original autoencoder split flagged 64 windows but failed temporal calibration; after moving the training boundary later, only one calibration window and zero holdout windows were flagged. The current autoencoder is therefore a regime-drift diagnostic, not a validated forecast component.
 - The corrected test-context detector flagged 0 of 210 test rows at the 99th-percentile threshold.
-- The earlier sandbox quick run could not complete exact direct LightGBM/NeuralNet confirmation and is treated only as a smoke test; the completed Apple-Silicon overnight search below supersedes it.
-- The first Apple-Silicon overnight search is complete: no anomaly model beat the control robustly as a standalone NeuralNet, but its confirmed statistical specialist produced complementary OOF errors.
-- A leave-one-origin-out blend of the three confirmed members improved development WAPE by 1.47% and recent-benchmark WAPE by 2.41%; this motivates weekend-v2.
-- Weekend-v2 retains anomaly mode as a specialist generator, adds asymmetric/hard-example policies and anomaly-free regime experts, and selects cross-fitted mixtures or gates rather than requiring one specialist to replace the control.
+- Standalone anomaly policies did not beat the control.
+- The uploaded overnight result tree is not checked in, so its provenance remains unknown and it is not canonical site evidence.
+- The reported 1.47% preflight blend is non-nested, provenance-limited and uncertain; its 95% bootstrap confidence interval crosses zero.
+- Weekend-v2 was not run. Frozen final periods and the recent benchmark must not be reused for tuning.
 
-The quick-run evidence is in [`reports/REAL_DATA_TEST_RESULTS.md`](reports/REAL_DATA_TEST_RESULTS.md). The serious local experiment is documented in [`docs/OVERNIGHT_ANOMALY_SEARCH.md`](docs/OVERNIGHT_ANOMALY_SEARCH.md).
+The checked-in audit is described in [`reports/REAL_DATA_TEST_RESULTS.md`](reports/REAL_DATA_TEST_RESULTS.md). Proposed search methodology is archived in [`reports/methodology/OVERNIGHT_ANOMALY_SEARCH.md`](reports/methodology/OVERNIGHT_ANOMALY_SEARCH.md).
 
 ## Anomaly Lab dashboard
 
-The local webapp now contains a dedicated **Anomaly Lab** rather than only the inherited forecasting pages. It reads the research artifacts directly from `outputs/` and shows:
+GitHub Pages is the canonical deployment. The authored webapp reads the same generated JSON files as the optional FastAPI preview and shows:
 
-- product-level statistical anomalies against their causal seasonal expectation;
-- local versus systemic flags and known-event protection;
-- autoencoder reconstruction timelines, split calibration and temporal drift;
+- product-level threshold exceedances against their causal seasonal expectation;
+- local versus systemic review signals and known-event context;
+- an honest unavailable state unless fingerprinted V2 evidence exists;
 - test-week context novelty using future-known covariates only;
-- the overnight candidate funnel and confirmed NeuralNet comparison;
-- live weekend-v2 screening/refinement/confirmation progress;
-- the final specialist/ensemble recommendation and generated command.
+- excluded compact-autoencoder evidence with its reason and hashes;
+- the non-nested preflight limitation and the control recommendation.
 
 ```bash
-uv run python webapp/server.py
+uv run python ml/publish_site.py
+uv run python -m webapp.server
 ```
 
-Open [`http://127.0.0.1:9001/anomalies`](http://127.0.0.1:9001/anomalies). The page polls the lightweight search-status endpoint once per minute, so a running weekend-v2 experiment becomes visible without restarting the server. Override the port with `VONAVE_ANOMALIE_PORT=<port>`.
+Open [`http://127.0.0.1:9001/anomalies`](http://127.0.0.1:9001/anomalies). There is no polling or runtime aggregation. `uv run python ml/publish_site.py --check` verifies source/output/site parity. Override the port with `VONAVE_ANOMALIE_PORT=<port>`.
+
+`webapp/static/` is the authored source and `docs/` is generated-only; do not
+edit `docs/` directly. Publication writes
+`outputs/dashboard/anomaly-dashboard-v2.json`, 30 versioned product files, and
+content-addressed manifests before safely replacing the owned site tree. The
+Pages workflow deploys checked-in `docs/` without training or searching. The
+repository's Pages source may need to be set to GitHub Actions once.
 
 ## What was transferred from DAVID
 
@@ -109,11 +117,11 @@ Among the 100 largest NeuralNet development errors, 89 are in `holiday_event` st
 - no observed row is automatically deleted;
 - every anomaly policy must beat the control on walk-forward WAPE before it can be recommended.
 
-## Recommended next experiment: weekend-v2 specialist search
+## Archived proposed experiment: weekend-v2 specialist search
 
-The first search answered the standalone-model question. Weekend-v2 asks the more useful question: **can anomaly-aware and recent-regime experts improve the canonical NeuralNet when combined only in the origins, products, or horizons where they add value?**
+Weekend-v2 was not run. The archived proposal asks whether anomaly-aware and recent-regime experts could improve the canonical NeuralNet under a properly nested protocol.
 
-The prior confirmation OOF already supports this direction:
+The provenance-limited, non-nested preflight reported:
 
 | Policy on prior confirmed OOF | Development improvement | Recent-benchmark improvement |
 |---|---:|---:|
@@ -122,7 +130,7 @@ The prior confirmation OOF already supports this direction:
 | Product-shrunk blend | 0.86% | 3.01% |
 | Bounded statistical specialist gate | 1.30% | 2.94% |
 
-Weekend-v2 searches 45 initial NeuralNet candidates, including anomaly-free recency/loss specialists and four anomaly actions: symmetric downweighting, negative-only downweighting, hard-example upweighting, and signed positive-up/negative-down weighting. Candidate promotion is based on leave-one-origin-out marginal ensemble value. The final stage compares global, horizon, product, aggregate, residual-stacking, nonlinear-risk, and bounded specialist-gate policies.
+Its 95% bootstrap interval was −0.24% to +2.85%, crossing zero. This is motivation only, not final evidence; the control remains recommended.
 
 ```bash
 uv sync
@@ -138,11 +146,11 @@ scripts/weekend_v2_status.sh
 scripts/resume_weekend_v2.sh
 ```
 
-See [`docs/WEEKEND_V2.md`](docs/WEEKEND_V2.md) for the complete protocol and [`reports/WEEKEND_V2_PREFLIGHT.md`](reports/WEEKEND_V2_PREFLIGHT.md) for the analysis of the uploaded overnight artifacts.
+See [`reports/methodology/WEEKEND_V2.md`](reports/methodology/WEEKEND_V2.md) for the proposed protocol and [`reports/WEEKEND_V2_PREFLIGHT.md`](reports/WEEKEND_V2_PREFLIGHT.md) for the provenance-limited preflight.
 
-## Completed first experiment: Apple-GPU overnight search
+## Archived, unverified methodology: Apple-GPU overnight search
 
-The earlier single autoencoder run is not the final test. The repository now contains a staged search that varies the demand representation, architecture, temporal training span, calibration policy, anomaly action, and statistical/autoencoder hybrid. It then requires improvement on the exact forecast pipeline before promotion.
+The earlier single autoencoder run is not verified result evidence. The repository contains archived staged-search methodology that varies the demand representation, architecture, temporal training span, calibration policy, anomaly action, and statistical/autoencoder hybrid. The result tree is unavailable, so no completion or outcome claim from that search is canonical.
 
 ```bash
 uv sync
@@ -164,7 +172,7 @@ scripts/resume_anomaly_search.sh
 
 The default `overnight` profile evaluates 36 autoencoder configurations across multiple cutoffs and seeds, then promotes candidates through exact DynamicRidge and MPS NeuralNet stages. Wider `weekend` and `exhaustive` profiles are also available. Every candidate is isolated in its own process, autoencoder profiles are fold/config cached, and the final decision uses development WAPE, recent-benchmark protection, top-demand-decile and holiday/event guards, plus origin bootstrap uncertainty.
 
-See [`docs/OVERNIGHT_ANOMALY_SEARCH.md`](docs/OVERNIGHT_ANOMALY_SEARCH.md) for the complete protocol, search dimensions, leakage contract, outputs, and final forecast command.
+See [`reports/methodology/OVERNIGHT_ANOMALY_SEARCH.md`](reports/methodology/OVERNIGHT_ANOMALY_SEARCH.md) for the archived protocol.
 
 ## Running the implementation
 
@@ -212,13 +220,13 @@ It uses LightGBM as a screening instrument, not as the final claim. Building the
 
 The generated `outputs/anomaly_screening/recommendation.json` includes the exact full NeuralNet confirmation command. If no candidate passes, the winner is `control`, which is a valid and useful result.
 
-Completed lower-memory weighting ablation:
+Archived, provenance-unverified lower-memory weighting ablation procedure:
 
 ```bash
 uv run python ml/run_lightweight_anomaly_ablation.py
 ```
 
-The checked-in result selects `control`; see `outputs/lightweight_anomaly_ablation/result.json`.
+The historical report selected `control`, but its result-tree provenance is unavailable. It is retained as archived methodology/evidence and does not supersede the canonical no-label/control framing.
 
 ### 4. Optional DAVID-like systemic autoencoder diagnostic
 
@@ -272,7 +280,7 @@ The implementation is direct-first because the submitted model and strongest val
 ```text
 ml/anomaly_detection.py             causal local/systemic score, EVT, features, weights
 ml/context_risk.py                  forecast-time known-context shift detector
-ml/systemic_autoencoder.py          original compact reconstruction diagnostic
+ml/systemic_autoencoder.py          legacy compact diagnostic (excluded evidence)
 ml/systemic_autoencoder_v2.py       temporal MLP/Conv/GRU search implementation
 ml/run_overnight_anomaly_search.py  first staged resumable search orchestrator
 ml/weekend_v2_common.py              specialist candidates, blends, gates, bootstrap
@@ -294,8 +302,8 @@ tests/test_systemic_autoencoder.py
 tests/test_systemic_autoencoder_v2.py
 tests/test_overnight_anomaly_search.py
 tests/test_weekend_v2.py
-docs/OVERNIGHT_ANOMALY_SEARCH.md
-docs/WEEKEND_V2.md
+reports/methodology/OVERNIGHT_ANOMALY_SEARCH.md
+reports/methodology/WEEKEND_V2.md
 reports/WEEKEND_V2_PREFLIGHT.md
 reports/DAVID_TRANSFER_AUDIT.md
 reports/INTERVIEW_TALK_TRACK.md

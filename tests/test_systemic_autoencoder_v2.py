@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
+import systemic_autoencoder_v2 as autoencoder_module
 
 from framework import Config, direct_panel_feature_names
 from systemic_autoencoder_v2 import (
@@ -10,6 +12,7 @@ from systemic_autoencoder_v2 import (
     apply_autoencoder_weights_to_panel,
     attach_autoencoder_origin_features,
     fit_score_systemic_autoencoder_v2,
+    build_cached_autoencoder_profile,
 )
 
 
@@ -129,3 +132,51 @@ def test_autoencoder_feature_schema_is_source_aware() -> None:
     hybrid = direct_panel_feature_names(cfg)
     assert all(column in hybrid for column in AUTOENCODER_ORIGIN_FEATURES)
     assert "anomaly_score_lag0" in hybrid
+
+
+def test_autoencoder_cache_validates_content_config_and_pickle_hash(
+    tmp_path, monkeypatch
+) -> None:
+    raw = _synthetic_raw(days=3, products=1)
+    cfg = Config()
+    cfg.autoencoder_cache_dir = str(tmp_path)
+    calls = []
+
+    def fake_fit(frame, ae_cfg):
+        calls.append((float(frame["Quantity"].sum()), ae_cfg.window))
+        profile = pd.DataFrame({
+            "DateKey": pd.to_datetime(frame["DateKey"]).drop_duplicates(),
+            "autoencoder_score": float(len(calls)),
+        })
+        return profile, {"best_epoch": 1}, object(), object()
+
+    monkeypatch.setattr(
+        autoencoder_module, "fit_score_systemic_autoencoder_v2", fake_fit
+    )
+    first, first_meta = build_cached_autoencoder_profile(raw, cfg)
+    reused, reused_meta = build_cached_autoencoder_profile(raw.copy(), cfg)
+    assert len(calls) == 1
+    assert first_meta["cache_hit"] is False
+    assert reused_meta["cache_hit"] is True
+    pd.testing.assert_frame_equal(first, reused)
+
+    changed = raw.copy()
+    changed.loc[0, "Quantity"] += 1.0
+    build_cached_autoencoder_profile(changed, cfg)
+    assert len(calls) == 2
+
+    cfg.autoencoder_window += 1
+    build_cached_autoencoder_profile(raw, cfg)
+    assert len(calls) == 3
+
+    cfg.autoencoder_window -= 1
+    original_pickle = tmp_path / f"{first_meta['cache_key']}.pkl"
+    original_pickle.write_bytes(b"corrupt")
+    with pytest.raises(RuntimeError, match="confirm-recompute-stale"):
+        build_cached_autoencoder_profile(raw, cfg)
+    assert len(calls) == 3
+    cfg.confirm_recompute_stale = True
+    rebuilt, rebuilt_meta = build_cached_autoencoder_profile(raw, cfg)
+    assert len(calls) == 4
+    assert rebuilt_meta["cache_hit"] is False
+    assert float(rebuilt["autoencoder_score"].iloc[0]) == 4.0

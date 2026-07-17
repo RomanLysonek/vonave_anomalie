@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import json
+from argparse import Namespace
+
+import pandas as pd
+import pytest
 
 from anomaly_search_common import (
     CONFIG_FIELDS,
@@ -11,6 +15,16 @@ from anomaly_search_common import (
 )
 from pipeline import configure_anomaly_runtime, parse_args
 from framework import Config
+from artifact_provenance import (
+    artifact_fingerprint,
+    output_fingerprints,
+    result_body_manifest,
+)
+from run_overnight_anomaly_search import (
+    _confirmation_recommendation,
+    _rank_forecast_results,
+    _should_skip,
+)
 
 
 def test_candidate_generation_is_deterministic_and_config_valid() -> None:
@@ -55,3 +69,151 @@ def test_pipeline_can_load_winner_candidate_file(tmp_path) -> None:
 def test_profiles_include_smoke_and_overnight() -> None:
     assert PROFILES["smoke"].autoencoder_epoch_cap < PROFILES["overnight"].autoencoder_epoch_cap
     assert PROFILES["overnight"].confirmation_seeds == (42, 123, 777)
+
+
+def test_orchestrator_only_skips_valid_fingerprinted_result(tmp_path) -> None:
+    trial = tmp_path / "trial"
+    trial.mkdir()
+    output = trial / "scores.parquet"
+    output.write_bytes(b"scores")
+    data = pd.DataFrame({"Quantity": [1.0, 2.0]})
+    expected = artifact_fingerprint(
+        schema_version="trial-v2",
+        semantic={"candidate": {"id": "one"}},
+        dataframes={"train": data},
+        source_paths=(),
+    )
+    payload = {
+        "schema_version": "autoencoder-diagnostic-v3",
+        "candidate": {"id": "one"},
+        "cutoffs": ["2026-01-01"],
+        "seeds": [42],
+        "runs": [{"seed": 42}],
+        "aggregate": {"diagnostic_objective": 1.0},
+        "status": "complete",
+    }
+    payload["artifact_manifest"] = {
+        "fingerprint": expected,
+        "outputs": output_fingerprints(trial, ("scores.parquet",)),
+        "result_body": result_body_manifest(payload),
+    }
+    (trial / "result.json").write_text(json.dumps(payload), encoding="utf-8")
+    args = Namespace(retry_failed=False, confirm_recompute_stale=False)
+    assert _should_skip(
+        trial,
+        args,
+        expected,
+        required_outputs=("scores.parquet",),
+    )
+
+    stale = artifact_fingerprint(
+        schema_version="trial-v2",
+        semantic={"candidate": {"id": "two"}},
+        dataframes={"train": data},
+        source_paths=(),
+    )
+    with pytest.raises(RuntimeError, match="confirm-recompute-stale"):
+        _should_skip(trial, args, stale, required_outputs=("scores.parquet",))
+
+    output.write_bytes(b"corrupt")
+    with pytest.raises(RuntimeError, match="confirm-recompute-stale"):
+        _should_skip(trial, args, expected, required_outputs=("scores.parquet",))
+    confirmed = Namespace(retry_failed=False, confirm_recompute_stale=True)
+    assert not _should_skip(
+        trial, confirmed, expected, required_outputs=("scores.parquet",)
+    )
+
+    (trial / "result.json").unlink()
+    (trial / "failure.json").write_text(
+        json.dumps({"status": "failed", "fingerprint": expected}),
+        encoding="utf-8",
+    )
+    assert _should_skip(trial, args, expected)
+    with pytest.raises(RuntimeError, match="confirm-recompute-stale"):
+        _should_skip(trial, args, stale)
+
+    (trial / "result.json").write_text(
+        json.dumps({"status": "complete", "artifact_manifest": {}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="confirm-recompute-stale"):
+        _should_skip(trial, args, expected)
+
+
+def test_forecast_ranking_is_invariant_to_frozen_benchmark() -> None:
+    def payload(candidate_id: str, family: str, dev: float, bench: float) -> dict:
+        summary = lambda wape: {
+            "global": {"WAPE": wape, "BiasRatio": 0.0},
+            "top_actual_decile": {"WAPE": wape},
+        }
+        return {
+            "candidate": {"id": candidate_id, "name": candidate_id, "family": family},
+            "model": "NeuralNet",
+            "development": summary(dev),
+            "benchmark": summary(bench),
+        }
+
+    results = [
+        payload("control", "control", 1.0, 1.0),
+        payload("a", "statistical", 0.8, 100.0),
+        payload("b", "statistical", 0.9, 0.01),
+    ]
+    assert [row["candidate_id"] for row in _rank_forecast_results(results)] == [
+        "a", "b", "control"
+    ]
+    results[1]["benchmark"] = {
+        "global": {"WAPE": 0.0001, "BiasRatio": 0.0},
+        "top_actual_decile": {"WAPE": 0.0001},
+    }
+    results[2]["benchmark"] = {
+        "global": {"WAPE": 9999.0, "BiasRatio": 0.0},
+        "top_actual_decile": {"WAPE": 9999.0},
+    }
+    assert [row["candidate_id"] for row in _rank_forecast_results(results)] == [
+        "a", "b", "control"
+    ]
+
+
+def test_confirmation_acceptance_and_winner_ignore_benchmark(tmp_path, monkeypatch) -> None:
+    monkeypatch.setitem(
+        _confirmation_recommendation.__globals__,
+        "bootstrap_origin_improvement",
+        lambda *args, **kwargs: {"probability_improvement_positive": 1.0},
+    )
+
+    def result(candidate_id: str, family: str, dev: float, bench: float) -> dict:
+        trial = tmp_path / candidate_id
+        trial.mkdir()
+        pd.DataFrame({
+            "ProductId": [1],
+            "DateKey": [pd.Timestamp("2026-01-02")],
+            "origin": [pd.Timestamp("2026-01-01")],
+            "actual": [10.0],
+            "pred_NeuralNet": [9.0],
+            "ProductAvailable": [True],
+        }).to_parquet(trial / "development_oof.parquet", index=False)
+        summary = lambda wape: {
+            "global": {"WAPE": wape},
+            "top_actual_decile": {"WAPE": wape},
+            "by_stratum": {},
+        }
+        return {
+            "_result_path": str(trial / "result.json"),
+            "candidate": {
+                "id": candidate_id,
+                "name": candidate_id,
+                "family": family,
+            },
+            "development": summary(dev),
+            "benchmark": summary(bench),
+        }
+
+    results = [
+        result("control", "control", 1.0, 1.0),
+        result("candidate", "statistical", 0.8, 1000.0),
+    ]
+    before = _confirmation_recommendation(tmp_path, results)
+    results[1]["benchmark"]["global"]["WAPE"] = 0.00001
+    after = _confirmation_recommendation(tmp_path, results)
+    assert before["winner"] == after["winner"]
+    assert before["comparisons"][0]["accepted"] == after["comparisons"][0]["accepted"]
