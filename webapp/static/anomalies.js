@@ -360,10 +360,9 @@ function renderUnavailable(error) {
 
 async function initAnomalyLab() {
   try {
-    const [forecast, anomaly] = await Promise.all([loadResults(), loadPublishedJson(anomalyDataPath())]);
+    const anomaly = await loadPublishedJson(anomalyDataPath());
     anomalyPayload = validateAggregatePayload(anomaly);
-    renderNav(forecast, "anomalies");
-    updateStrategyCopy(forecast, canonicalStrategy(forecast));
+    renderNav({}, "");
     renderBanner(anomaly);
     renderDecision(anomaly);
     renderKpis(anomaly);

@@ -1,11 +1,12 @@
-"""Local presentation dashboard for the Notino forecast results.
+"""Local presentation dashboard for the anomaly research results.
 
 Serves the authored frontend and optional APIs backed by the exact JSON files
 published to GitHub Pages. The server never performs a separate aggregation.
 
-Run (from repo root): uv run python -m webapp.server
+Run (from repo root): uv run python webapp/server.py
+or:                   uv run python -m webapp.server
 Then open:            http://127.0.0.1:9001
-Override port:        VONAVE_ANOMALIE_PORT=9011 uv run python -m webapp.server
+Override port:        VONAVE_ANOMALIE_PORT=9011 uv run python webapp/server.py
 """
 
 import json
@@ -82,7 +83,7 @@ def favicon() -> FileResponse:
 
 @app.get("/anomalies")
 def anomalies_page() -> FileResponse:
-    return FileResponse(STATIC_DIR / "anomalies.html")
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/api/anomaly-lab")
@@ -113,12 +114,19 @@ def evaluation_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "evaluation.html")
 
 
+@app.get("/control")
+def control_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "model.html")
+
+
 @app.get("/model/{slug}")
 def model_page(slug: str) -> FileResponse:
-    # One shared template; model.js reads `slug` from the URL itself and
-    # renders that model's data/colors. Unknown slugs still get the page --
-    # model.js shows a clear "not found" state rather than a 404.
-    return FileResponse(STATIC_DIR / "model.html")
+    if slug != "neuralnet":
+        raise HTTPException(
+            status_code=404,
+            detail="Only the NeuralNet control is exposed in the anomaly research app.",
+        )
+    return control_page()
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -128,4 +136,4 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.environ.get("VONAVE_ANOMALIE_PORT", "9001"))
-    uvicorn.run("webapp.server:app", host="127.0.0.1", port=port)
+    uvicorn.run(app, host="127.0.0.1", port=port)

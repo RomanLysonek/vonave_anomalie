@@ -3,27 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NOTINO / Interview Assignment — Anomaly Research Overview</title>
+  <title>NOTINO — Anomaly Research</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./styles.css?v=22" />
+  <link rel="stylesheet" href="./styles.css?v=23" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <nav class="suite-shell" aria-label="Interview assignment suite">
-    <strong>NOTINO / Interview Assignment</strong>
-    <div>
-      <a href="https://romanlysonek.github.io/vonava_predikce/">Classical Forecasting</a>
-      <a href="https://romanlysonek.github.io/vonave_anomalie/" aria-current="page">Anomaly Research</a>
-      <a href="https://romanlysonek.github.io/vonavy_chronos/">Chronos-2 Challenger</a>
-    </div>
-  </nav>
-  <div class="bg-glow"></div>
-
-  <div class="promo-bar">
-    <a class="promo-dataset-link" data-dataset-link href="dataset.html" title="The data structure and the modeling decisions it forced">30 Product Time Series</a>
-    <span id="promo-strategy">7-Day Forecast</span>
-    <span id="promo-model-count">Research Models Compared</span>
-    <a class="promo-evaluation-link" data-evaluation-link href="evaluation.html" title="Rolling forecast origins; not the same thing as recursive inference">Walk-Forward Validated</a>
+  <div class="promo-bar research-ribbon">
+    <span>Causal statistical scores</span>
+    <span>Systemic V2 diagnostics</span>
+    <span>Context novelty</span>
+    <span>Leakage-safe evaluation</span>
   </div>
 
   <header class="hero">
@@ -32,290 +22,131 @@
         <span class="brand-logo">NOTINO</span>
         <span class="brand-tagline anomaly-brand-tagline">ANOMALY RESEARCH</span>
       </div>
-      <div class="hero-title-block">
-        <h1>Forecast + Anomaly Research Dashboard</h1>
-      </div>
+      <div class="hero-title-block"><h1>Knowledge transfer into demand forecasting</h1></div>
     </div>
-    <nav class="site-nav" id="site-nav"></nav>
+    <nav class="site-nav" id="site-nav" aria-label="Anomaly research"></nav>
   </header>
 
-  <main id="app">
-    <section class="selection-strip">
+  <header class="model-hero page-description-strip anomaly-page-hero" style="--mc:#b76600">
+    <span class="model-badge">DAVID / DBAAS knowledge transfer</span>
+    <h1>Did anomaly recognition add value?</h1>
+    <p class="blurb">I transferred anomaly-recognition ideas into the forecasting assignment, bounded each intervention, and tested it against the unchanged forecast control. The honest result is that <code>anomaly_mode=off</code> remains recommended.</p>
+  </header>
+
+  <main id="app" class="anomaly-app">
+    <section class="snapshot-banner" id="snapshot-banner" aria-live="polite">
+      <strong>Loading published snapshot…</strong>
+    </section>
+
+    <section class="anomaly-intro">
       <div>
-        <span class="selection-label">View</span>
-        <strong id="canonical-selection-text">Canonical submission</strong>
+        <h2>Ranking unusual observations is not labelled detection</h2>
+        <p>The scores below prioritise product-days for review. No adjudicated anomaly labels exist, and campaign or retail-event overlap is explanatory context rather than ground truth. This work must not be read as a validated detector or as a false-alarm study.</p>
       </div>
-      <div class="controls">
-        <div class="control-group">
-          <label for="strategy-select">Forecast strategy</label>
-          <select id="strategy-select"></select>
-        </div>
-        <div class="control-group">
-          <label for="regime-select">Availability treatment</label>
-          <select id="regime-select">
-            <option value="conditional">Available days only</option>
-            <option value="realized">All days / realized sales</option>
-          </select>
-        </div>
-      </div>
-      <p class="selection-explanation" id="regime-explanation"></p>
-    </section>
-
-    <section class="kpi-grid" id="kpi-grid">
-      <div class="kpi-card skeleton"></div>
-      <div class="kpi-card skeleton"></div>
-      <div class="kpi-card skeleton"></div>
-      <div class="kpi-card skeleton"></div>
-    </section>
-
-    <section class="panel model-comparison-panel">
-      <div class="panel-header row">
+      <div class="anomaly-decision-card" id="anomaly-decision-card">
+        <span class="status-dot status-running" aria-hidden="true"></span>
         <div>
-          <h2>Model comparison</h2>
-          <p id="model-comparison-context">Recent-benchmark OOF · available product-days · common rows · global aggregation</p>
-        </div>
-      </div>
-      <div class="columns-grid" id="columns-grid"></div>
-    </section>
-
-    <section class="panel" id="ensemble-panel" hidden>
-      <div class="panel-header row">
-        <div>
-          <h2>Development-OOF ensemble</h2>
-          <p>Negative deltas favour the ensemble; Δ WAPE is absolute percentage points, while relative change is measured against the best single model</p>
-        </div>
-        <span class="winner-badge" id="ensemble-status">—</span>
-      </div>
-      <div class="panel-grid compact-grid">
-        <div class="table-wrap">
-          <table class="data-table" id="ensemble-weights-table">
-            <thead><tr><th>Member</th><th>Weight</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div class="table-wrap">
-          <table class="data-table" id="ensemble-comparison-table">
-            <thead><tr><th>Measure</th><th>Ensemble</th><th>Best single</th><th>Δ WAPE (pp)</th><th>Relative change</th></tr></thead>
-            <tbody></tbody>
-          </table>
+          <strong id="anomaly-decision-title">Loading current recommendation…</strong>
+          <p id="anomaly-decision-copy"></p>
         </div>
       </div>
     </section>
 
-    <section class="panel-grid">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>MAE &amp; RMSE by model</h2>
-          <p>Selected strategy and evaluation regime — lower is better</p>
-        </div>
-        <div class="chart-wrap">
-          <canvas id="chart-comparison"></canvas>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Walk-forward benchmark folds</h2>
-          <p>Every model is scored on the same common population</p>
-        </div>
-        <div class="table-wrap" id="cv-table-wrap">
-          <table class="data-table" id="cv-table">
-            <thead>
-              <tr><th>Fold</th><th>Model</th><th>MAE</th><th>RMSE</th><th>Bias</th><th>Bias%</th></tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
+    <section class="research-principles" aria-label="Transferred anomaly methods">
+      <article>
+        <span>01 / Local</span>
+        <h2>Causal statistical scores</h2>
+        <p>Same-weekday expectations, past-only robust severity, and temporally calibrated EVT thresholds rank unusual historical demand without looking forward.</p>
+      </article>
+      <article>
+        <span>02 / Systemic</span>
+        <h2>Portfolio &amp; V2 diagnostics</h2>
+        <p>Cross-product shocks and reconstruction diagnostics separate isolated product behaviour from market-wide movement. V2 evidence appears only when its provenance is verifiable.</p>
+      </article>
+      <article>
+        <span>03 / Context</span>
+        <h2>Future-context novelty</h2>
+        <p>Price, campaign, discount and calendar combinations can be scored before demand arrives. Future realised sales never enter this diagnostic.</p>
+      </article>
+      <article>
+        <span>04 / Action</span>
+        <h2>Bounded experiments</h2>
+        <p>Origin-known features, bounded training weights and specialist policies were treated as reversible hypotheses. None earned promotion over the control.</p>
+      </article>
     </section>
 
-    <section class="panel" id="strategy-comparison-panel" hidden>
-      <div class="panel-header row">
-        <div>
-          <h2>Direct vs. recursive — paired development OOF</h2>
-          <p>Same products, origins, dates and horizons for both strategies</p>
-        </div>
-        <div class="control-group">
-          <label for="pair-metric-select">Metric</label>
-          <select id="pair-metric-select">
-            <option value="WAPE">WAPE</option>
-            <option value="MAE">MAE</option>
-            <option value="RMSE">RMSE</option>
-            <option value="Bias">Bias</option>
-            <option value="BiasRatio">Bias ratio</option>
-          </select>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table class="data-table" id="strategy-comparison-table">
-          <thead>
-            <tr><th>Model</th><th>Direct</th><th>Recursive</th><th>Recursive − Direct</th><th>Winner</th><th>Paired rows</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
+    <section class="kpi-grid anomaly-kpi-grid" id="anomaly-kpi-grid" aria-label="Audit summary"></section>
 
     <section class="panel">
       <div class="panel-header row">
         <div>
-          <h2>Error by forecast horizon</h2>
-          <p>Development OOF · use this to inspect recursive error propagation</p>
+          <h2>Product threshold-exceedance explorer</h2>
+          <p>Observed demand, causal expectation and calibrated review score from the checked-in audit.</p>
         </div>
         <div class="controls">
           <div class="control-group">
-            <label for="horizon-model-select">Model</label>
-            <select id="horizon-model-select"></select>
-          </div>
-          <div class="control-group">
-            <label for="horizon-metric-select">Metric</label>
-            <select id="horizon-metric-select">
-              <option value="WAPE">WAPE</option>
-              <option value="MAE">MAE</option>
-              <option value="RMSE">RMSE</option>
+            <label for="anomaly-range-select">History</label>
+            <select id="anomaly-range-select">
+              <option value="180">Last 180 days</option>
+              <option value="365" selected>Last 365 days</option>
+              <option value="730">Last 730 days</option>
+              <option value="all">All history</option>
             </select>
           </div>
-        </div>
-      </div>
-      <div class="chart-wrap">
-        <canvas id="chart-horizon"></canvas>
-      </div>
-    </section>
-
-    <section class="panel-grid">
-      <div class="panel">
-        <div class="panel-header row">
-          <div>
-            <h2>Per-product error &amp; bias</h2>
-            <p>Conditional common population, sorted by WAPE</p>
-          </div>
-          <div class="controls">
-            <div class="control-group">
-              <label for="product-error-model-select">Model</label>
-              <select id="product-error-model-select"></select>
-            </div>
-            <div class="control-group">
-              <label for="product-error-split-select">Split</label>
-              <select id="product-error-split-select">
-                <option value="recent_benchmark">Recent benchmark</option>
-                <option value="development">Development</option>
-              </select>
-            </div>
+          <div class="control-group">
+            <label for="anomaly-product-select">Product</label>
+            <select id="anomaly-product-select"></select>
           </div>
         </div>
-        <div class="table-wrap diagnostic-table-wrap">
-          <table class="data-table" id="per-product-table">
-            <thead><tr><th>Product</th><th>WAPE</th><th>MAE</th><th>Bias%</th><th>Actual</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
       </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Validation periods</h2>
-          <p>Development windows grouped by how closely they resemble the January test week or stress retail-event behavior</p>
-        </div>
-        <div class="definition-list" id="regime-definitions"></div>
-        <div class="table-wrap diagnostic-table-wrap">
-          <table class="data-table" id="regime-table">
-            <thead><tr><th>Period type</th><th>Model</th><th>WAPE</th><th>Bias%</th><th>n</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel-grid">
-      <div class="panel">
-        <div class="panel-header">
-          <h2>High-volume product-days</h2>
-          <p>Retrospective stress test on rows whose actual demand is in the top 10% of the recent benchmark</p>
-        </div>
-        <div class="diagnostic-note compact" id="top-decile-explanation"></div>
-        <div class="table-wrap diagnostic-table-wrap">
-          <table class="data-table" id="top-decile-table">
-            <thead><tr><th>Model</th><th>WAPE</th><th>MAE</th><th>Bias%</th><th>Actual cutoff</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <h2>Largest recent errors</h2>
-          <p>Rows requiring business interpretation, not automatic clipping</p>
-        </div>
-        <div class="table-wrap diagnostic-table-wrap">
-          <table class="data-table" id="top-error-table">
-            <thead><tr><th>Date</th><th>Product</th><th>Model</th><th>Actual</th><th>Pred.</th><th>|Error|</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div class="diagnostic-note" id="top-error-insight" hidden></div>
-      </div>
-    </section>
-
-    <section class="panel" id="final-audit-panel" hidden>
-      <div class="panel-header row">
-        <div>
-          <h2>Frozen final audit</h2>
-          <p>Three untouched origins; the frozen conditional test-aligned objective is primary, with global WAPE shown for context</p>
-        </div>
-        <span class="winner-badge">One-shot</span>
-      </div>
-      <div class="table-wrap diagnostic-table-wrap">
-        <table class="data-table" id="final-audit-table">
-          <thead><tr><th>Model</th><th>Aligned WAPE</th><th>Global WAPE</th><th>MAE</th><th>Bias%</th><th>Coverage</th></tr></thead>
+      <div class="anomaly-product-summary" id="anomaly-product-summary"></div>
+      <div class="chart-wrap anomaly-chart-tall"><canvas id="chart-product-anomalies"></canvas></div>
+      <div class="diagnostic-note compact">Amber marks threshold exceedances for review. Event context can explain a row; it does not make that row a labelled anomaly.</div>
+      <div class="table-wrap">
+        <table class="data-table" id="product-anomaly-table">
+          <thead><tr><th>Date</th><th>Actual</th><th>Expected</th><th>Score</th><th>Context</th><th>Training weight</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
     </section>
 
-    <section class="panel">
-      <div class="panel-header row">
-        <div>
-          <h2>Product explorer — all models</h2>
-          <p>History vs. <span id="product-strategy-note">selected</span> forecasts; click a model label below to show or hide its forecast</p>
+    <section class="panel-grid anomaly-two-column">
+      <section class="panel">
+        <div class="panel-header"><h2>Systemic review timeline</h2><p>Daily portfolio demand and product-level threshold exceedances.</p></div>
+        <div class="chart-wrap anomaly-chart-tall"><canvas id="chart-systemic-timeline"></canvas></div>
+      </section>
+      <section class="panel">
+        <div class="panel-header"><h2>Highest scores</h2><p>A review queue only; no truth classification is implied.</p></div>
+        <div class="table-wrap anomaly-scroll-table">
+          <table class="data-table" id="top-local-table">
+            <thead><tr><th>Product</th><th>Date</th><th>Actual</th><th>Expected</th><th>Score</th><th>Context</th></tr></thead>
+            <tbody></tbody>
+          </table>
         </div>
-        <div class="controls product-explorer-controls">
-          <div class="control-group">
-            <label for="product-select">Product</label>
-            <select id="product-select"></select>
-          </div>
-          <label class="checkbox-control" for="product-history-toggle">
-            <input id="product-history-toggle" type="checkbox" checked />
-            <span>Show history</span>
-          </label>
-        </div>
-      </div>
-      <div class="product-model-legend-row" aria-label="Product explorer model visibility controls">
-        <div class="product-model-legend" id="product-model-legend"></div>
-        <div class="product-model-actions">
-          <button class="legend-action" id="product-models-select-all" type="button">Select all</button>
-          <button class="legend-action" id="product-models-deselect-all" type="button">Deselect all</button>
-        </div>
-      </div>
-      <div class="chart-wrap tall">
-        <canvas id="chart-product"></canvas>
-      </div>
+      </section>
+    </section>
+
+    <section class="panel-grid anomaly-two-column">
+      <section class="panel">
+        <div class="panel-header"><h2>Future-known context novelty</h2><p>Price, campaign and calendar diagnostics only—never future sales.</p></div>
+        <div class="chart-wrap"><canvas id="chart-context-risk"></canvas></div>
+        <div class="diagnostic-note compact" id="context-risk-note"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-header"><h2>Evidence boundary</h2><p>Unsupported result trees are never inferred or promoted.</p></div>
+        <div class="evidence-list" id="evidence-list"></div>
+      </section>
     </section>
 
     <section class="panel">
-      <div class="panel-header">
-        <h2>Canonical submission grid</h2>
-        <p>The table below always remains the selected submission, independent of the dashboard view.</p>
-      </div>
-      <div class="table-wrap tall" id="submission-table-wrap"></div>
+      <div class="panel-header"><h2>Historical Weekend-v2 preflight</h2><p>Contaminated or unverifiable evidence remains excluded from the current recommendation.</p></div>
+      <div class="diagnostic-note" id="weekend-preflight-note"></div>
     </section>
   </main>
 
-  <footer>
-    <p id="footer-method-text">Loading canonical forecasting method…</p>
-  </footer>
-
+  <footer><p>Control / <code>anomaly_mode=off</code> remains the current recommendation.</p></footer>
   <script>window.STATIC_DASHBOARD = true;</script>
-  <script src="./common.js?v=15"></script>
-  <script src="./app.js?v=14"></script>
+  <script src="./common.js?v=17"></script>
+  <script src="./anomalies.js?v=4"></script>
 </body>
 </html>
