@@ -153,15 +153,6 @@ function validateProductPayload(data, selectedProductId) {
   return data;
 }
 
-function renderBanner(data) {
-  const banner = data.snapshot_banner || {};
-  document.getElementById("snapshot-banner").innerHTML = `
-    <strong>${esc(banner.version || data.schema_version)}</strong>
-    <span>Snapshot through ${esc(banner.snapshot_as_of || data.snapshot_as_of)} · ${esc(banner.provenance || "provenance unavailable")}</span>
-    <code title="Source manifest hash">${esc(String(data.source_manifest_hash || "").slice(0, 16))}</code>
-  `;
-}
-
 function renderDecision(data) {
   const recommendation = data.recommendation || {};
   const policy = recommendation.policy || "unavailable";
@@ -363,7 +354,6 @@ async function initAnomalyLab() {
     const anomaly = await loadPublishedJson(anomalyDataPath());
     anomalyPayload = validateAggregatePayload(anomaly);
     renderNav({}, "");
-    renderBanner(anomaly);
     renderDecision(anomaly);
     renderKpis(anomaly);
     renderProductOptions(anomaly);

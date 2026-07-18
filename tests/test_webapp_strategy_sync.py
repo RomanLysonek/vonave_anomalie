@@ -109,7 +109,7 @@ def test_authored_pages_have_independent_anomaly_navigation() -> None:
     common = (STATIC / "common.js").read_text(encoding="utf-8")
     expected = (
         'label: "Anomaly overview"',
-        'label: "Data & transfer"',
+        'label: "Data Story"',
         'label: "Evaluation"',
         'label: "Control forecast"',
     )
@@ -119,7 +119,7 @@ def test_authored_pages_have_independent_anomaly_navigation() -> None:
     for name in PAGES:
         html = (STATIC / name).read_text(encoding="utf-8")
         assert '<html lang="en-GB">' in html
-        assert 'aria-label="Anomaly research"' in html
+        assert 'aria-label="Anomaly dashboard sections"' in html
         assert "NOTINO" in html
         for forbidden in FORBIDDEN_PORTAL_TEXT:
             assert forbidden not in html
@@ -148,7 +148,7 @@ def test_supporting_pages_keep_anomaly_scope() -> None:
     assert "Control / <code>anomaly_mode=off</code> remains recommended" in evaluation
 
     control = (STATIC / "model.html").read_text(encoding="utf-8")
-    assert "Control retained for anomaly evaluation" in control
+    assert "Quantity Forecast Dashboard" in control
     assert "Why this control exists" in control
     assert 'id="strategy-select"' not in control
 

@@ -36,9 +36,11 @@ function checkIndependentNavigation() {
   vm.runInContext(source("common.js"), context);
   context.renderNav({}, "dataset");
 
-  for (const label of ["Anomaly overview", "Data & transfer", "Evaluation", "Control forecast"]) {
+  for (const label of ["Anomaly overview", "Data Story", "Evaluation", "Control forecast"]) {
     assert.ok(nav.innerHTML.includes(label), label);
   }
+  assert.ok(nav.innerHTML.includes('style="--pill-color:#a78bfa"'));
+  assert.ok(nav.innerHTML.includes('style="--pill-color:#9ca3af"'));
   assert.ok(nav.innerHTML.includes('href="index.html"'));
   assert.ok(nav.innerHTML.includes('href="dataset.html"'));
   assert.ok(nav.innerHTML.includes('href="evaluation.html"'));
@@ -61,6 +63,9 @@ function checkStaticAnomalyContract() {
   assert.ok(html.includes("DAVID / DBAAS knowledge transfer"));
   assert.ok(html.includes("No adjudicated anomaly labels exist"));
   assert.ok(html.includes("anomaly_mode=off"));
+  assert.ok(!html.includes("snapshot-banner"));
+  assert.ok(!anomalySource.includes("renderBanner"));
+  assert.ok(!anomalySource.includes("Snapshot through"));
   assert.ok(!html.includes('id="strategy-select"'));
 }
 

@@ -205,8 +205,8 @@ function renderNav(_data, activeSlug) {
   if (!nav) return;
   const items = [
     { slug: "", label: "Anomaly overview", color: "#f59e0b", href: overviewHref() },
-    { slug: "dataset", label: "Data & transfer", color: "#f59e0b", href: datasetHref() },
-    { slug: "evaluation", label: "Evaluation", color: "#f59e0b", href: evaluationHref() },
+    { slug: "dataset", label: "Data Story", color: "#a78bfa", href: datasetHref() },
+    { slug: "evaluation", label: "Evaluation", color: "#9ca3af", href: evaluationHref() },
     { slug: "control", label: "Control forecast", color: "#ffffff", href: controlHref() },
   ];
   nav.innerHTML = items

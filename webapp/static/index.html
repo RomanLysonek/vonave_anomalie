@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NOTINO - anomalie</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/styles.css?v=25" />
+  <link rel="stylesheet" href="/static/styles.css?v=26" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -20,11 +20,13 @@
     <div class="hero-top">
       <div class="brand">
         <span class="brand-logo">NOTINO</span>
-        <span class="brand-tagline anomaly-brand-tagline">ANOMALY RESEARCH</span>
+        <span class="brand-tagline anomaly-brand-tagline">ANOMALIE</span>
       </div>
-      <div class="hero-title-block"><h1>Knowledge transfer into demand forecasting</h1></div>
+      <div class="hero-title-block">
+        <h1>Quantity Forecast Dashboard</h1>
+      </div>
     </div>
-    <nav class="site-nav" id="site-nav" aria-label="Anomaly research"></nav>
+    <nav class="site-nav" id="site-nav" aria-label="Anomaly dashboard sections"></nav>
   </header>
 
   <header class="description-strip model-hero" style="--mc:#b76600">
@@ -34,10 +36,6 @@
   </header>
 
   <main id="app" class="anomaly-app">
-    <section class="snapshot-banner" id="snapshot-banner" aria-live="polite">
-      <strong>Loading published snapshot…</strong>
-    </section>
-
     <section class="anomaly-intro">
       <div>
         <h2>Ranking unusual observations is not labelled detection</h2>
@@ -145,7 +143,7 @@
   </main>
 
   <footer><p>Control / <code>anomaly_mode=off</code> remains the current recommendation.</p></footer>
-  <script src="/static/common.js?v=17"></script>
-  <script src="/static/anomalies.js?v=4"></script>
+  <script src="/static/common.js?v=18"></script>
+  <script src="/static/anomalies.js?v=5"></script>
 </body>
 </html>

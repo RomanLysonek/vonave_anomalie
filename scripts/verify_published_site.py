@@ -14,6 +14,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SITE_PAGES = ("index.html", "dataset.html", "evaluation.html", "model.html")
 PAGE_TITLE = "NOTINO - anomalie"
+HEADER_TITLE = "Quantity Forecast Dashboard"
+HEADER_BRAND = ("NOTINO", "ANOMALIE")
 STRIP_GEOMETRY = {
     "box-sizing": "border-box",
     "width": "100%",
@@ -164,6 +166,12 @@ class _ShellParser(HTMLParser):
         self.model_heroes: list[tuple[str, tuple[str, ...], dict[str, str | None]]] = []
         self.titles: list[str] = []
         self._title_parts: list[str] | None = None
+        self._text_targets: list[tuple[str, list[str]]] = []
+        self.header_text: dict[str, list[str]] = {
+            "brand-logo": [],
+            "anomaly-brand-tagline": [],
+            "hero-title-block": [],
+        }
 
     def handle_starttag(
         self, tag: str, attrs: list[tuple[str, str | None]]
@@ -172,6 +180,9 @@ class _ShellParser(HTMLParser):
         classes = tuple((attributes.get("class") or "").split())
         if tag == "title":
             self._title_parts = []
+        for target in self.header_text:
+            if target in classes:
+                self._text_targets.append((target, []))
         if "description-strip" in classes:
             self.model_heroes.append((tag, classes, attributes))
         if tag == "body":
@@ -203,6 +214,9 @@ class _ShellParser(HTMLParser):
             self.in_body = False
             self.stack.clear()
             return
+        if self._text_targets and tag in {"span", "div"}:
+            target, parts = self._text_targets.pop()
+            self.header_text[target].append("".join(parts).strip())
         if not self.in_body or tag not in self.stack:
             return
         while self.stack:
@@ -212,6 +226,8 @@ class _ShellParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._title_parts is not None:
             self._title_parts.append(data)
+        for _, parts in self._text_targets:
+            parts.append(data)
 
 
 def _verify_page_shell(path: Path) -> None:
@@ -220,6 +236,12 @@ def _verify_page_shell(path: Path) -> None:
     parser.close()
     if parser.titles != [PAGE_TITLE]:
         raise RuntimeError(f"Generated page title contract failed: {path.name}")
+    if parser.header_text["brand-logo"] != [HEADER_BRAND[0]]:
+        raise RuntimeError(f"Generated header brand contract failed: {path.name}")
+    if parser.header_text["anomaly-brand-tagline"] != [HEADER_BRAND[1]]:
+        raise RuntimeError(f"Generated header tagline contract failed: {path.name}")
+    if parser.header_text["hero-title-block"] != [HEADER_TITLE]:
+        raise RuntimeError(f"Generated static header title contract failed: {path.name}")
     if len(parser.model_heroes) != 1:
         raise RuntimeError(f"Generated description-strip count failed: {path.name}")
     tag, classes, attributes = parser.model_heroes[0]

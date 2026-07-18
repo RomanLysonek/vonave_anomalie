@@ -23,7 +23,6 @@
 * { box-sizing: border-box; }
 
 html {
-  overflow-y: scroll;
   scrollbar-gutter: stable;
 }
 
@@ -40,28 +39,6 @@ body {
 .bias-neutral {
   color: var(--text);
   font-variant-numeric: tabular-nums;
-}
-
-.snapshot-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 16px;
-  border: 1px solid var(--ink);
-  background: var(--surface);
-  font-size: 12px;
-}
-
-.snapshot-banner span {
-  color: var(--text-dim);
-}
-
-.snapshot-banner code {
-  padding: 4px 6px;
-  color: var(--ink);
-  background: #fff;
-  border: 1px solid var(--hairline);
 }
 
 .status-dot.status-neutral {
@@ -102,13 +79,6 @@ body {
   line-height: 1.5;
 }
 
-@media (max-width: 760px) {
-  .snapshot-banner {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -130,7 +100,7 @@ body {
   z-index: 1;
   background: #fff;
   border-bottom: 1px solid var(--hairline);
-  padding: 10px 56px;
+  padding: 10px var(--page-padding-inline);
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -148,7 +118,7 @@ header.hero {
   position: relative;
   z-index: 1;
   background: var(--ink);
-  padding: 28px 56px 0;
+  padding: 28px var(--page-padding-inline) 0;
 }
 
 .hero-top {
@@ -348,7 +318,7 @@ main#app {
   width: 100%;
   max-width: var(--dashboard-shell-width);
   margin: 0 auto;
-  padding: 40px 56px 64px;
+  padding: 40px var(--page-padding-inline) 64px;
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -443,7 +413,7 @@ footer {
   position: relative;
   z-index: 1;
   background: var(--ink);
-  padding: 28px 56px 40px;
+  padding: 28px var(--page-padding-inline) 40px;
   color: #b8b8b8;
   font-size: 12.5px;
   line-height: 1.6;
@@ -457,7 +427,6 @@ footer code { background: #2a2a2a; color: #fff; padding: 2px 6px; border-radius:
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .panel-grid { grid-template-columns: 1fr; }
   .panel-grid .panel + .panel { border-left: 1px solid var(--ink); border-top: none; margin-top: -1px; }
-  .promo-bar, header.hero, main#app, footer p { padding-left: 24px; padding-right: 24px; }
   .hero-title-block { text-align: left; }
 }
 
@@ -1700,8 +1669,7 @@ select:disabled {
   grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
 }
 
-.research-ribbon,
-header.hero {
+.research-ribbon {
   width: 100%;
   max-width: var(--dashboard-shell-width);
   margin: 0 auto;

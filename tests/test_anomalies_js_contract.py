@@ -29,3 +29,25 @@ def test_anomaly_client_ignores_out_of_order_product_responses() -> None:
     assert "let productRequestToken = 0;" in source
     assert "const requestToken = ++productRequestToken;" in source
     assert source.count("requestToken !== productRequestToken") == 2
+
+
+def test_anomaly_client_does_not_render_snapshot_provenance_banner() -> None:
+    for directory in (ROOT / "webapp" / "static", ROOT / "docs"):
+        source = (directory / "anomalies.js").read_text(encoding="utf-8")
+        overview = (directory / "index.html").read_text(encoding="utf-8")
+        styles = (directory / "styles.css").read_text(encoding="utf-8")
+
+        for forbidden in (
+            "snapshot-banner",
+            "renderBanner",
+            "snapshot_banner",
+            "Snapshot through",
+            "Source manifest hash",
+        ):
+            assert forbidden not in source
+            assert forbidden not in overview
+            assert forbidden not in styles
+
+        assert ".slice(0, 16)" not in source
+        assert "data.schema_version" not in overview
+        assert "source_manifest_hash" not in overview
