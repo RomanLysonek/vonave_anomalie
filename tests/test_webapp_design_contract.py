@@ -70,7 +70,7 @@ PROMO_CHILD_CSS = """\
   white-space: nowrap;
 }"""
 PROMO_TABLET_CSS = """\
-@media (max-width: 800px) {
+@media (max-width: 840px) {
   .promo-bar {
     min-height: 57px;
     padding: 8px 24px;
@@ -358,7 +358,7 @@ def test_mobile_promo_computed_alignment_overrides_tablet_odd_even_rules() -> No
 
 
 def test_desktop_promo_tracks_do_not_overlap_above_responsive_breakpoint() -> None:
-    viewport_width = 801
+    viewport_width = 841
     page_padding = 24 * 2
     column_gaps = 24 * 3
     measured_longest_label_width = 170
@@ -366,37 +366,44 @@ def test_desktop_promo_tracks_do_not_overlap_above_responsive_breakpoint() -> No
     assert track_width >= measured_longest_label_width
 
     css = (AUTHORED / "styles.css").read_text(encoding="utf-8")
-    assert "@media (max-width: 800px) {\n  .promo-bar {" in css
+    assert "@media (max-width: 840px) {\n  .promo-bar {" in css
+    assert "@media (max-width: 800px) {\n  .promo-bar {" not in css
     assert "@media (max-width: 700px) {\n  .promo-bar {" not in css
 
 
-def test_anomaly_promo_has_safe_computed_geometry_at_boundaries(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("viewport_width", "columns", "min_height", "alignments"),
+    (
+        (480, 1, "89px", ["left", "left", "left", "left"]),
+        (701, 2, "57px", ["left", "right", "left", "right"]),
+        (776, 2, "57px", ["left", "right", "left", "right"]),
+        (800, 2, "57px", ["left", "right", "left", "right"]),
+        (801, 2, "57px", ["left", "right", "left", "right"]),
+        (840, 2, "57px", ["left", "right", "left", "right"]),
+        (841, 4, "40px", ["left", "center", "center", "right"]),
+        (900, 4, "40px", ["left", "center", "center", "right"]),
+        (901, 4, "40px", ["left", "center", "center", "right"]),
+    ),
+)
+def test_anomaly_promo_has_safe_computed_geometry_at_boundaries(
+    tmp_path: Path,
+    viewport_width: int,
+    columns: int,
+    min_height: str,
+    alignments: list[str],
+) -> None:
     chrome = _chrome_binary()
     if not chrome:
         pytest.skip("Chrome/Chromium is required for rendered promo geometry")
 
-    at_800 = _render_promo_geometry(tmp_path, chrome, 800)
-    assert at_800 == {
-        "viewportWidth": 800,
-        "columns": 2,
-        "minHeight": "57px",
-        "rowGap": "8px",
-        "alignments": ["left", "right", "left", "right"],
-        "overlaps": [],
-    }
-
-    at_801 = _render_promo_geometry(tmp_path, chrome, 801)
-    assert at_801["viewportWidth"] == 801
-    assert at_801["columns"] == 4
-    assert at_801["minHeight"] == "40px"
-    assert at_801["alignments"] == ["left", "center", "center", "right"]
-    assert at_801["overlaps"] == []
-
-    at_480 = _render_promo_geometry(tmp_path, chrome, 480)
-    assert at_480["columns"] == 1
-    assert at_480["minHeight"] == "89px"
-    assert at_480["alignments"] == ["left", "left", "left", "left"]
-    assert at_480["overlaps"] == []
+    geometry = _render_promo_geometry(tmp_path, chrome, viewport_width)
+    assert geometry["viewportWidth"] == viewport_width
+    assert geometry["columns"] == columns
+    assert geometry["minHeight"] == min_height
+    assert geometry["alignments"] == alignments
+    assert geometry["overlaps"] == []
+    if columns == 2:
+        assert geometry["rowGap"] == "8px"
 
 
 @pytest.mark.parametrize("directory", (AUTHORED, GENERATED), ids=("authored", "generated"))
