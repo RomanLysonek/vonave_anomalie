@@ -177,7 +177,7 @@
     },
     {
       "path": "data/published_results_manifest.json",
-      "sha256": "c1e7d180de79444d7436bf253ea5ad43420b8a80690ce7634787cad2cd1c7f5e",
+      "sha256": "8c4aa77a93a0fe7ff16b16bea9e609353173ec96b1483c9b8a774a12e901c697",
       "size": 14387
     },
     {
@@ -227,7 +227,7 @@
     },
     {
       "path": "styles.css",
-      "sha256": "7b6b9184329d64c8130fffc95c124e113201ff8017d9b811a6a55448f8a4f014",
+      "sha256": "2c0d4e898cd145f7fb94d974e71394f3631085f6895d56f97d09d454aec4b18e",
       "size": 43376
     }
   ],

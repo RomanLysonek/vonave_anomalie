@@ -56,7 +56,7 @@ PROMO_CSS_CONTRACTS = (
   white-space: nowrap;
 }""",
     """\
-@media (max-width: 800px) {
+@media (max-width: 840px) {
   .promo-bar {
     min-height: 57px;
     padding: 8px 24px;
