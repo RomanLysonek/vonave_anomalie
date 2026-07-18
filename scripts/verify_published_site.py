@@ -18,20 +18,25 @@ STRIP_GEOMETRY = {
     "box-sizing": "border-box",
     "width": "100%",
     "max-width": "none",
-    "min-height": "216px",
+    "min-height": "var(--description-strip-min-height)",
     "margin": "0",
-    "padding": "40px 56px",
-    "border-bottom": "6px solid var(--mc)",
+    "padding": "var(--description-strip-padding-block) var(--page-padding-inline)",
+    "border-bottom": "var(--description-strip-border-width) solid var(--mc)",
 }
-MODEL_HERO_SELECTORS = (
-    ".model-hero",
-    ".model-hero .model-badge",
-    ".model-hero h1",
-    ".model-hero p.blurb",
-    ".model-hero a.source-link",
-    ".model-hero a.source-link:hover",
-    ".model-hero",
-    ".model-hero code",
+STRIP_VARIABLES = {
+    "--page-padding-inline": "56px",
+    "--description-strip-padding-block": "40px",
+    "--description-strip-border-width": "6px",
+    "--description-strip-min-height": "300px",
+}
+DESCRIPTION_STRIP_SELECTORS = (
+    ".description-strip",
+    ".description-strip .model-badge",
+    ".description-strip h1",
+    ".description-strip p.blurb",
+    ".description-strip a.source-link",
+    ".description-strip a.source-link:hover",
+    ".description-strip code",
 )
 VOID_HTML_ELEMENTS = {
     "area",
@@ -115,12 +120,12 @@ def _css_declarations(body: str) -> dict[str, str]:
     }
 
 
-def _model_hero_rules(css: str) -> list[tuple[str, dict[str, str]]]:
+def _css_rules(css: str, selector_fragment: str) -> list[tuple[str, dict[str, str]]]:
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
     rules = []
     for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
         selector = match.group(1).strip()
-        if ".model-hero" not in selector:
+        if selector_fragment not in selector:
             continue
         declarations = _css_declarations(match.group(2))
         rules.append((selector, declarations))
@@ -167,7 +172,7 @@ class _ShellParser(HTMLParser):
         classes = tuple((attributes.get("class") or "").split())
         if tag == "title":
             self._title_parts = []
-        if "model-hero" in classes:
+        if "description-strip" in classes:
             self.model_heroes.append((tag, classes, attributes))
         if tag == "body":
             self.in_body = True
@@ -185,7 +190,7 @@ class _ShellParser(HTMLParser):
     ) -> None:
         attributes = dict(attrs)
         classes = tuple((attributes.get("class") or "").split())
-        if "model-hero" in classes:
+        if "description-strip" in classes:
             self.model_heroes.append((tag, classes, attributes))
         if self.in_body and not self.stack:
             self.top_level.append((tag, classes))
@@ -218,7 +223,7 @@ def _verify_page_shell(path: Path) -> None:
     if len(parser.model_heroes) != 1:
         raise RuntimeError(f"Generated description-strip count failed: {path.name}")
     tag, classes, attributes = parser.model_heroes[0]
-    if tag != "header" or classes != ("model-hero",):
+    if tag != "header" or classes != ("description-strip", "model-hero"):
         raise RuntimeError(f"Generated description-strip identity failed: {path.name}")
     if not re.fullmatch(r"--mc:#[0-9a-fA-F]{6}", attributes.get("style") or ""):
         raise RuntimeError(f"Generated description-strip accent failed: {path.name}")
@@ -227,7 +232,7 @@ def _verify_page_shell(path: Path) -> None:
     except ValueError as exc:
         raise RuntimeError(f"Generated shared hero is missing: {path.name}") from exc
     if parser.top_level[hero_index + 1:hero_index + 2] != [
-        ("header", ("model-hero",))
+        ("header", ("description-strip", "model-hero"))
     ]:
         raise RuntimeError(f"Generated description-strip position failed: {path.name}")
 
@@ -237,16 +242,28 @@ def _verify_site_shell(docs: Path) -> None:
         _verify_page_shell(docs / name)
 
     css = (docs / "styles.css").read_text(encoding="utf-8")
-    rules = _model_hero_rules(css)
-    if tuple(selector for selector, _ in rules) != MODEL_HERO_SELECTORS:
+    root_rules = _css_rules(css, ":root")
+    if len(root_rules) != 2:
+        raise RuntimeError("Canonical description-strip variable rule count failed")
+    if any(root_rules[0][1].get(name) != value for name, value in STRIP_VARIABLES.items()):
+        raise RuntimeError("Canonical description-strip variables failed")
+    if root_rules[1] != (":root", {"--page-padding-inline": "24px"}):
+        raise RuntimeError("Canonical responsive page padding variable failed")
+    responsive_contract = (
+        "@media (max-width: 900px) {\n"
+        "  :root { --page-padding-inline: 24px; }"
+    )
+    active_css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+    if responsive_contract not in active_css:
+        raise RuntimeError("Canonical responsive media-query scope failed")
+
+    rules = _css_rules(css, ".description-strip")
+    if tuple(selector for selector, _ in rules) != DESCRIPTION_STRIP_SELECTORS:
         raise RuntimeError("Shared description-strip selector ownership failed")
     if _outer_geometry(rules[0][1]) != STRIP_GEOMETRY:
         raise RuntimeError("Shared description-strip geometry ownership failed")
-    if _outer_geometry(rules[6][1]) != {
-        "padding-left": "24px",
-        "padding-right": "24px",
-    }:
-        raise RuntimeError("Shared description-strip responsive geometry failed")
+    if _css_rules(css, ".model-hero"):
+        raise RuntimeError("Legacy model-hero CSS selectors remain")
     if "scrollbar-gutter: stable;" not in css:
         raise RuntimeError("Stable scrollbar-gutter contract failed")
     for forbidden in (

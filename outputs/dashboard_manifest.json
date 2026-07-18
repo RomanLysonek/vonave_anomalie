@@ -140,13 +140,13 @@
   "product_count": 30,
   "published_results_manifest": {
     "path": "outputs/published_results_manifest.json",
-    "sha256": "eb7e36ae5b9365de415ee83ec08b2187bc8b52a68bd3bf31339445dc4d4d14e5",
+    "sha256": "4c58ecc6a86dba374338a67e4a4aadae103ce88aea224c12dc1cd2e6df0b9a2f",
     "size": 14387
   },
   "schema_version": "dashboard-publication-v2",
   "site_manifest": {
     "path": "docs/site-manifest.json",
-    "sha256": "0dd3ce2ed6c43378dd999de614c0d38fa79db0a34fa6d87d808b0fb095f7befa",
+    "sha256": "35cf99de20269ab6ccd03a765757fa9eaf4d7171835641ca971b9c08137997c4",
     "size": 7860
   },
   "source_manifest_hash": "71a69b16bf097e8e4b816ebfd25c618afc3d5c4a879cc1e6d065d7d550c78311",

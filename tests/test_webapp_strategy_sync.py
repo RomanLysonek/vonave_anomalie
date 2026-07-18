@@ -1,12 +1,13 @@
 import json
 from pathlib import Path
+import shutil
 
 import pytest
 from fastapi import HTTPException
 
 from scripts.verify_published_site import (
     PAGE_TITLE,
-    _model_hero_rules,
+    _css_rules,
     _verify_page_shell,
     _verify_site_shell,
 )
@@ -51,12 +52,15 @@ def test_shell_verifier_rejects_alternate_title_and_strip_markup(
     valid = f"""
       <html><head><title>{PAGE_TITLE}</title></head><body>
       <header class="hero"></header>
-      <header class="model-hero" style="--mc:#b76600"></header>
+      <header class="description-strip model-hero" style="--mc:#b76600"></header>
       </body></html>
     """
     for invalid in (
         valid.replace("<head>", "<head><title>Other</title>"),
-        valid.replace('class="model-hero"', 'class="model-hero extra"'),
+        valid.replace(
+            'class="description-strip model-hero"',
+            'class="description-strip model-hero extra"',
+        ),
     ):
         path = tmp_path / "page.html"
         path.write_text(invalid, encoding="utf-8")
@@ -65,8 +69,40 @@ def test_shell_verifier_rejects_alternate_title_and_strip_markup(
 
 
 def test_shell_verifier_detects_complex_selector_geometry_override() -> None:
-    css = '.model-hero:not(.unused .selector) { --note: "a;b"; margin-inline: 4px; }'
-    assert _model_hero_rules(css)[0][0] == ".model-hero:not(.unused .selector)"
+    css = '.description-strip:not(.unused .selector) { margin-inline: 4px; }'
+    assert _css_rules(css, ".description-strip")[0][0] == (
+        ".description-strip:not(.unused .selector)"
+    )
+
+
+def test_shell_verifier_requires_responsive_override_media_scope(
+    tmp_path: Path,
+) -> None:
+    site = tmp_path / "site"
+    shutil.copytree(STATIC, site)
+    styles = site / "styles.css"
+    original = styles.read_text(encoding="utf-8")
+    css = original.replace(
+        "@media (max-width: 900px) {\n  :root { --page-padding-inline: 24px; }",
+        ":root { --page-padding-inline: 24px; }\n@media (max-width: 900px) {",
+        1,
+    )
+    styles.write_text(css, encoding="utf-8")
+    with pytest.raises(RuntimeError, match="media-query scope"):
+        _verify_site_shell(site)
+
+    css = original.replace(
+        "@media (max-width: 900px) {",
+        "@media (min-width: 901px) {",
+        1,
+    )
+    css += (
+        "\n/* @media (max-width: 900px) {\n"
+        "  :root { --page-padding-inline: 24px; }\n} */\n"
+    )
+    styles.write_text(css, encoding="utf-8")
+    with pytest.raises(RuntimeError, match="media-query scope"):
+        _verify_site_shell(site)
 
 
 def test_authored_pages_have_independent_anomaly_navigation() -> None:
