@@ -4,6 +4,13 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
+from scripts.verify_published_site import (
+    PAGE_TITLE,
+    _model_hero_rules,
+    _verify_page_shell,
+    _verify_site_shell,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "webapp" / "static"
@@ -19,7 +26,7 @@ FORBIDDEN_PORTAL_TEXT = (
 def test_root_is_the_anomaly_research_experience() -> None:
     html = (STATIC / "index.html").read_text(encoding="utf-8")
 
-    assert "<title>NOTINO — Anomaly Research</title>" in html
+    assert f"<title>{PAGE_TITLE}</title>" in html
     assert "DAVID / DBAAS knowledge transfer" in html
     assert "Causal statistical scores" in html
     assert "Portfolio &amp; V2 diagnostics" in html
@@ -29,6 +36,37 @@ def test_root_is_the_anomaly_research_experience() -> None:
     assert "anomaly_mode=off" in html
     assert 'id="strategy-select"' not in html
     assert "Model comparison" not in html
+
+
+@pytest.mark.parametrize("directory", (STATIC, DOCS), ids=("authored", "generated"))
+def test_every_page_uses_one_shared_description_strip_and_constant_title(
+    directory: Path,
+) -> None:
+    _verify_site_shell(directory)
+
+
+def test_shell_verifier_rejects_alternate_title_and_strip_markup(
+    tmp_path: Path,
+) -> None:
+    valid = f"""
+      <html><head><title>{PAGE_TITLE}</title></head><body>
+      <header class="hero"></header>
+      <header class="model-hero" style="--mc:#b76600"></header>
+      </body></html>
+    """
+    for invalid in (
+        valid.replace("<head>", "<head><title>Other</title>"),
+        valid.replace('class="model-hero"', 'class="model-hero extra"'),
+    ):
+        path = tmp_path / "page.html"
+        path.write_text(invalid, encoding="utf-8")
+        with pytest.raises(RuntimeError):
+            _verify_page_shell(path)
+
+
+def test_shell_verifier_detects_complex_selector_geometry_override() -> None:
+    css = '.model-hero:not(.unused .selector) { --note: "a;b"; margin-inline: 4px; }'
+    assert _model_hero_rules(css)[0][0] == ".model-hero:not(.unused .selector)"
 
 
 def test_authored_pages_have_independent_anomaly_navigation() -> None:

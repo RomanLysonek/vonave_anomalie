@@ -2,14 +2,53 @@
 from __future__ import annotations
 
 from hashlib import sha256
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
+import re
 import stat
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SITE_PAGES = ("index.html", "dataset.html", "evaluation.html", "model.html")
+PAGE_TITLE = "NOTINO - anomalie"
+STRIP_GEOMETRY = {
+    "box-sizing": "border-box",
+    "width": "100%",
+    "max-width": "none",
+    "min-height": "216px",
+    "margin": "0",
+    "padding": "40px 56px",
+    "border-bottom": "6px solid var(--mc)",
+}
+MODEL_HERO_SELECTORS = (
+    ".model-hero",
+    ".model-hero .model-badge",
+    ".model-hero h1",
+    ".model-hero p.blurb",
+    ".model-hero a.source-link",
+    ".model-hero a.source-link:hover",
+    ".model-hero",
+    ".model-hero code",
+)
+VOID_HTML_ELEMENTS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+}
 
 
 def _canonical_hash(value: Any) -> str:
@@ -65,6 +104,164 @@ def _regular_files(root: Path) -> dict[str, Path]:
 
     visit(root)
     return files
+
+
+def _css_declarations(body: str) -> dict[str, str]:
+    return {
+        name.strip(): value.strip()
+        for declaration in body.split(";")
+        if ":" in declaration
+        for name, value in [declaration.split(":", 1)]
+    }
+
+
+def _model_hero_rules(css: str) -> list[tuple[str, dict[str, str]]]:
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+    rules = []
+    for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+        selector = match.group(1).strip()
+        if ".model-hero" not in selector:
+            continue
+        declarations = _css_declarations(match.group(2))
+        rules.append((selector, declarations))
+    return rules
+
+
+def _outer_geometry(declarations: dict[str, str]) -> dict[str, str]:
+    return {
+        name: value
+        for name, value in declarations.items()
+        if (
+            name in {
+                "box-sizing",
+                "width",
+                "min-width",
+                "max-width",
+                "height",
+                "min-height",
+                "max-height",
+                "margin",
+                "padding",
+                "border-bottom",
+            }
+            or name.startswith("margin-")
+            or name.startswith("padding-")
+        )
+    }
+
+
+class _ShellParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.in_body = False
+        self.stack: list[str] = []
+        self.top_level: list[tuple[str, tuple[str, ...]]] = []
+        self.model_heroes: list[tuple[str, tuple[str, ...], dict[str, str | None]]] = []
+        self.titles: list[str] = []
+        self._title_parts: list[str] | None = None
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        attributes = dict(attrs)
+        classes = tuple((attributes.get("class") or "").split())
+        if tag == "title":
+            self._title_parts = []
+        if "model-hero" in classes:
+            self.model_heroes.append((tag, classes, attributes))
+        if tag == "body":
+            self.in_body = True
+            self.stack.clear()
+            return
+        if not self.in_body:
+            return
+        if not self.stack:
+            self.top_level.append((tag, classes))
+        if tag not in VOID_HTML_ELEMENTS:
+            self.stack.append(tag)
+
+    def handle_startendtag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        attributes = dict(attrs)
+        classes = tuple((attributes.get("class") or "").split())
+        if "model-hero" in classes:
+            self.model_heroes.append((tag, classes, attributes))
+        if self.in_body and not self.stack:
+            self.top_level.append((tag, classes))
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "title" and self._title_parts is not None:
+            self.titles.append("".join(self._title_parts).strip())
+            self._title_parts = None
+        if tag == "body":
+            self.in_body = False
+            self.stack.clear()
+            return
+        if not self.in_body or tag not in self.stack:
+            return
+        while self.stack:
+            if self.stack.pop() == tag:
+                break
+
+    def handle_data(self, data: str) -> None:
+        if self._title_parts is not None:
+            self._title_parts.append(data)
+
+
+def _verify_page_shell(path: Path) -> None:
+    parser = _ShellParser()
+    parser.feed(path.read_text(encoding="utf-8"))
+    parser.close()
+    if parser.titles != [PAGE_TITLE]:
+        raise RuntimeError(f"Generated page title contract failed: {path.name}")
+    if len(parser.model_heroes) != 1:
+        raise RuntimeError(f"Generated description-strip count failed: {path.name}")
+    tag, classes, attributes = parser.model_heroes[0]
+    if tag != "header" or classes != ("model-hero",):
+        raise RuntimeError(f"Generated description-strip identity failed: {path.name}")
+    if not re.fullmatch(r"--mc:#[0-9a-fA-F]{6}", attributes.get("style") or ""):
+        raise RuntimeError(f"Generated description-strip accent failed: {path.name}")
+    try:
+        hero_index = parser.top_level.index(("header", ("hero",)))
+    except ValueError as exc:
+        raise RuntimeError(f"Generated shared hero is missing: {path.name}") from exc
+    if parser.top_level[hero_index + 1:hero_index + 2] != [
+        ("header", ("model-hero",))
+    ]:
+        raise RuntimeError(f"Generated description-strip position failed: {path.name}")
+
+
+def _verify_site_shell(docs: Path) -> None:
+    for name in SITE_PAGES:
+        _verify_page_shell(docs / name)
+
+    css = (docs / "styles.css").read_text(encoding="utf-8")
+    rules = _model_hero_rules(css)
+    if tuple(selector for selector, _ in rules) != MODEL_HERO_SELECTORS:
+        raise RuntimeError("Shared description-strip selector ownership failed")
+    if _outer_geometry(rules[0][1]) != STRIP_GEOMETRY:
+        raise RuntimeError("Shared description-strip geometry ownership failed")
+    if _outer_geometry(rules[6][1]) != {
+        "padding-left": "24px",
+        "padding-right": "24px",
+    }:
+        raise RuntimeError("Shared description-strip responsive geometry failed")
+    if "scrollbar-gutter: stable;" not in css:
+        raise RuntimeError("Stable scrollbar-gutter contract failed")
+    for forbidden in (
+        ".page-description-strip",
+        ".anomaly-page-hero",
+        ".dataset-hero",
+        ".evaluation-hero",
+    ):
+        if forbidden in css:
+            raise RuntimeError(f"Page-specific description geometry found: {forbidden}")
+
+    for script in docs.glob("*.js"):
+        source = script.read_text(encoding="utf-8")
+        if "document.title" in source or "page-title" in source:
+            raise RuntimeError(f"Generated script mutates the browser title: {script.name}")
 
 
 def _require_fingerprint(record: Any, path: Path, label: str) -> None:
@@ -227,6 +424,7 @@ def verify_publication(
         )
     for relative, record in site_records.items():
         _require_fingerprint(record, docs / relative, "Generated-site")
+    _verify_site_shell(docs)
 
     aggregate_path = dashboard / "anomaly-dashboard-v2.json"
     aggregate = _json_object(aggregate_path)
