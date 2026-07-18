@@ -34,8 +34,8 @@ function evaluationHref() {
   return window.STATIC_DASHBOARD ? "evaluation.html" : "/evaluation";
 }
 
-function anomaliesHref() {
-  return window.STATIC_DASHBOARD ? "anomalies.html" : "/anomalies";
+function controlHref() {
+  return window.STATIC_DASHBOARD ? "model.html" : "/control";
 }
 
 function wireSharedLinks() {
@@ -46,8 +46,8 @@ function wireSharedLinks() {
   document.querySelectorAll("[data-evaluation-link]").forEach((link) => {
     link.href = evaluationHref();
   });
-  document.querySelectorAll("[data-anomalies-link]").forEach((link) => {
-    link.href = anomaliesHref();
+  document.querySelectorAll("[data-control-link]").forEach((link) => {
+    link.href = controlHref();
   });
 }
 
@@ -202,32 +202,19 @@ function updateStrategyCopy(data, strategy) {
   if (modelCount) modelCount.textContent = "Research Models Compared";
 }
 
-/**
- * Renders the anomaly-research navigation.
- *
- * The baseline models remain visible in the Overview comparison, but only the
- * canonical NeuralNet receives a dedicated model tab. Statistical, autoencoder
- * and hybrid specialists are research policies and are presented in Anomaly Lab.
- */
-function renderNav(data, activeSlug) {
+function renderNav(_data, activeSlug) {
   const nav = document.getElementById("site-nav");
   if (!nav) return;
-  const neuralNet = (data.models || []).find((model) => model.key === "NeuralNet");
   const items = [
-    { slug: "", label: "Overview", color: "#ffffff", href: overviewHref() },
-    { slug: "anomalies", label: "Anomaly Lab", color: "#f59e0b", href: anomaliesHref() },
-    { slug: "dataset", label: "Data story", color: "#a78bfa", href: datasetHref() },
-    { slug: "evaluation", label: "Evaluation", color: "#9ca3af", href: evaluationHref() },
-    ...(neuralNet ? [{
-      slug: neuralNet.slug,
-      label: "Control NeuralNet",
-      color: neuralNet.color,
-      href: modelHref(neuralNet.slug),
-    }] : []),
+    { slug: "", label: "Anomaly overview", color: "#f59e0b", href: overviewHref() },
+    { slug: "dataset", label: "Data & transfer", color: "#f59e0b", href: datasetHref() },
+    { slug: "evaluation", label: "Evaluation", color: "#f59e0b", href: evaluationHref() },
+    { slug: "control", label: "Control forecast", color: "#ffffff", href: controlHref() },
   ];
   nav.innerHTML = items
     .map((it) => {
-      const active = it.slug === (activeSlug || "");
+      const active = it.slug === (activeSlug || "")
+        || (it.slug === "control" && activeSlug === "neuralnet");
       return `<a class="nav-pill${active ? " active" : ""}" style="--pill-color:${it.color}" href="${it.href}">${it.label}</a>`;
     })
     .join("");

@@ -2,7 +2,8 @@ function currentSlug() {
   const query = new URLSearchParams(window.location.search).get("model");
   if (query) return query;
   const parts = window.location.pathname.split("/").filter(Boolean);
-  return parts[parts.length - 1] || "";
+  const current = parts[parts.length - 1] || "";
+  return current === "control" || current === "model.html" ? "neuralnet" : current;
 }
 
 const KIND_LABEL = { primary: "Submission", ensemble: "OOF Ensemble", baseline: "Baseline", naive: "Naive" };
@@ -469,7 +470,7 @@ async function main() {
     renderHero(model);
     refresh();
     document.getElementById("footer-note").innerHTML =
-      `Comparing against the other ${(data.models || []).length - 1} models? See the <a href="${overviewHref()}" style="color:${model.color}">Overview page</a>.`;
+      `This forecast is shown only as the control needed to evaluate anomaly interventions. <a href="${overviewHref()}" style="color:${model.color}">Return to anomaly research</a>.`;
   } catch (err) {
     document.getElementById("app").innerHTML = `
       <div class="panel">
