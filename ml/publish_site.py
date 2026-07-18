@@ -51,7 +51,6 @@ LEGACY_GENERATED_FILES = {
     "styles.css",
 }
 AUTHORED_SITE_FILES = {
-    "anomalies.html",
     "anomalies.js",
     "app.js",
     "common.js",

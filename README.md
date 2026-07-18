@@ -1,8 +1,8 @@
 # vonave_anomalie
 
-**DAVID-informed anomaly-aware extension of the `vonava_predikce` retail demand forecaster.**
+**Standalone DAVID/DBAAS-informed anomaly research for the NOTINO forecasting assignment.**
 
-This repository does not treat unlabelled threshold exceedances as anomaly ground truth. It transfers selected DAVID concepts—reconstruction error, EVT/POT tail calibration, temporal windows, and separation between detection and action—into the existing leakage-safe forecasting pipeline for controlled evaluation.
+This repository shows how the author's anomaly-recognition knowledge was transferred into the interview task. It does not treat unlabelled threshold exceedances as anomaly ground truth. Selected concepts—reconstruction error, EVT/POT tail calibration, temporal windows, and separation between detection and action—enter the leakage-safe forecasting pipeline only as controlled experiments.
 
 The original forecasting implementation and its detailed documentation are preserved in [`FORECAST_BASELINE.md`](FORECAST_BASELINE.md). The design audit is in [`reports/DAVID_TRANSFER_AUDIT.md`](reports/DAVID_TRANSFER_AUDIT.md), and an interview-ready explanation is in [`reports/INTERVIEW_TALK_TRACK.md`](reports/INTERVIEW_TALK_TRACK.md).
 
@@ -23,7 +23,7 @@ The original forecasting implementation and its detailed documentation are prese
 
 The checked-in audit is described in [`reports/REAL_DATA_TEST_RESULTS.md`](reports/REAL_DATA_TEST_RESULTS.md). Proposed search methodology is archived in [`reports/methodology/OVERNIGHT_ANOMALY_SEARCH.md`](reports/methodology/OVERNIGHT_ANOMALY_SEARCH.md).
 
-## Anomaly Lab dashboard
+## Anomaly research webapp
 
 GitHub Pages is the canonical deployment. The authored webapp reads the same generated JSON files as the optional FastAPI preview and shows:
 
@@ -36,10 +36,11 @@ GitHub Pages is the canonical deployment. The authored webapp reads the same gen
 
 ```bash
 uv run python ml/publish_site.py
+uv run python webapp/server.py
 uv run python -m webapp.server
 ```
 
-Open [`http://127.0.0.1:9001/anomalies`](http://127.0.0.1:9001/anomalies). There is no polling or runtime aggregation. `uv run python ml/publish_site.py --check` verifies source/output/site parity. Override the port with `VONAVE_ANOMALIE_PORT=<port>`.
+Open [`http://127.0.0.1:9001/`](http://127.0.0.1:9001/). The root is the anomaly-research experience; the forecast appears only as a control comparator. There is no polling or runtime aggregation. `uv run python ml/publish_site.py --check` verifies source/output/site parity. Override the port with `VONAVE_ANOMALIE_PORT=<port>`.
 
 `webapp/static/` is the authored source and `docs/` is generated-only; do not
 edit `docs/` directly. Publication writes

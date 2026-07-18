@@ -3,153 +3,77 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NOTINO / Interview Assignment — Anomaly Evaluation</title>
+  <title>NOTINO — Anomaly Evaluation</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="./styles.css?v=22" />
+  <link rel="stylesheet" href="./styles.css?v=23" />
 </head>
 <body>
-  <nav class="suite-shell" aria-label="Interview assignment suite">
-    <strong>NOTINO / Interview Assignment</strong>
-    <div>
-      <a href="https://romanlysonek.github.io/vonava_predikce/">Classical Forecasting</a>
-      <a href="https://romanlysonek.github.io/vonave_anomalie/" aria-current="page">Anomaly Research</a>
-      <a href="https://romanlysonek.github.io/vonavy_chronos/">Chronos-2 Challenger</a>
-    </div>
-  </nav>
-  <div class="bg-glow"></div>
-
-  <div class="promo-bar">
-    <a class="promo-dataset-link" data-dataset-link href="dataset.html" title="The data structure and the modeling decisions it forced">30 Product Time Series</a>
-    <span id="promo-strategy">7-Day Forecast</span>
-    <span id="promo-model-count">Research Models Compared</span>
-    <a class="promo-evaluation-link" data-evaluation-link href="evaluation.html" title="Rolling forecast origins; not the same thing as recursive inference">Walk-Forward Validated</a>
+  <div class="promo-bar research-ribbon">
+    <span>Fold-local fitting</span><span>Bounded actions</span><span>Frozen confirmation</span><span>Control retained</span>
   </div>
-
   <header class="hero">
     <div class="hero-top">
-      <div class="brand">
-        <span class="brand-logo">NOTINO</span>
-        <span class="brand-tagline anomaly-brand-tagline">ANOMALY RESEARCH</span>
-      </div>
-      <div class="hero-title-block">
-        <h1>Forecast + Anomaly Research Dashboard</h1>
-      </div>
+      <div class="brand"><span class="brand-logo">NOTINO</span><span class="brand-tagline anomaly-brand-tagline">ANOMALY RESEARCH</span></div>
+      <div class="hero-title-block"><h1>Knowledge transfer into demand forecasting</h1></div>
     </div>
-    <nav class="site-nav" id="site-nav"></nav>
+    <nav class="site-nav" id="site-nav" aria-label="Anomaly research"></nav>
   </header>
-
-  <header class="model-hero page-description-strip evaluation-hero" style="--mc:#4b5563">
-    <span class="model-badge">Methodology</span>
-    <h1>Evaluation process</h1>
-    <p class="blurb">How rolling forecast origins, direct and recursive inference, availability-aware scoring, model selection, confirmation and the frozen final audit fit together.</p>
+  <header class="model-hero page-description-strip anomaly-page-hero" style="--mc:#b76600">
+    <span class="model-badge">Evaluation</span>
+    <h1>Did anomaly-aware forecasting help?</h1>
+    <p class="blurb">Every anomaly intervention had to improve the same chronological forecasting objective as the untouched control. Interesting anomaly rankings alone were never sufficient.</p>
   </header>
 
   <main id="app">
-    <section class="panel evaluation-distinction-panel">
-      <div class="panel-header">
-        <h2>Two separate ideas</h2>
-        <p>“Walk-forward” describes the evaluation loop; “direct” and “recursive” describe how a model produces the seven forecast days inside each loop.</p>
-      </div>
-      <div class="evaluation-concept-grid">
-        <article class="evaluation-concept-card">
-          <span class="evaluation-concept-kicker">Outer loop</span>
-          <h3>Walk-forward / rolling-origin validation</h3>
-          <p>Choose a historical cutoff, train using only information available by that cutoff, predict the following seven days, score after their actuals are revealed, then repeat at another cutoff. Each repetition is an independent out-of-fold test.</p>
-        </article>
-        <article class="evaluation-concept-card">
-          <span class="evaluation-concept-kicker">Inside one fold</span>
-          <h3>Direct vs. recursive forecasting</h3>
-          <p>Direct predicts horizons 1–7 from the same observed pre-origin history. Recursive predicts one day, appends that estimate as synthetic history, and uses it to construct the next day. Either strategy can be evaluated with the same walk-forward origins.</p>
-        </article>
-      </div>
-      <div class="diagnostic-note compact evaluation-current-note" id="evaluation-current-note"></div>
-    </section>
-
-    <section class="panel evaluation-method-panel">
-      <div class="panel-header">
-        <h2>One walk-forward fold, step by step</h2>
-        <p>The same leakage-safe sequence is repeated for every selected origin.</p>
-      </div>
-      <div class="definition-list evaluation-step-list">
-        <div class="definition-item evaluation-step-item"><strong>1 · Freeze the origin</strong><span>The origin is the final day considered known. Quantities, availability states and aggregate-demand features after that date are unavailable to training and feature construction.</span></div>
-        <div class="definition-item evaluation-step-item"><strong>2 · Build training data</strong><span>The model is fitted only on eligible historical targets at or before the origin. Unavailable-product quantities are treated as censored observations rather than genuine zero demand.</span></div>
-        <div class="definition-item evaluation-step-item"><strong>3 · Forecast seven days</strong><span>The target block is origin + 1 through origin + 7. Future-known calendar, campaign, discount, price and event information may be used; future realized quantities may not.</span></div>
-        <div class="definition-item evaluation-step-item"><strong>4 · Align common rows</strong><span>Compared models are scored on the same product-date population. This prevents one model from appearing better merely because difficult or missing rows were silently excluded.</span></div>
-        <div class="definition-item evaluation-step-item"><strong>5 · Score after the fact</strong><span>WAPE is primary; MAE, RMSE, signed bias and bias ratio diagnose scale, tail errors and systematic over- or under-forecasting.</span></div>
-        <div class="definition-item evaluation-step-item"><strong>6 · Move the origin</strong><span>The complete process is repeated at another historical cutoff. Models are refitted or baselines recomputed from the information that would genuinely have existed at that time.</span></div>
+    <section class="panel evaluation-distinction-panel anomaly-evaluation-panel">
+      <div class="panel-header"><h2>Leakage-safe experiment contract</h2><p>The detector and forecast are rebuilt as they would have existed at each historical origin.</p></div>
+      <div class="evaluation-stage-grid">
+        <article class="evaluation-stage-card"><span class="evaluation-stage-badge">01 / Fit</span><h2>Past only</h2><p>Expectations, robust scaling, EVT thresholds and optional autoencoder preprocessing are fitted on the fold's training history.</p><strong class="evaluation-stage-detail">No future-derived medians</strong></article>
+        <article class="evaluation-stage-card"><span class="evaluation-stage-badge">02 / Expose</span><h2>Origin state</h2><p>Only anomaly state available by the forecast origin may enter a feature. Target-row scores can affect historical loss weights, not predictors.</p><strong class="evaluation-stage-detail">Feature/loss paths separated</strong></article>
+        <article class="evaluation-stage-card"><span class="evaluation-stage-badge">03 / Compare</span><h2>Same rows</h2><p>Control and intervention are scored on aligned product-dates under the same rolling origins, metric population and forecast objective.</p><strong class="evaluation-stage-detail">No convenient exclusions</strong></article>
+        <article class="evaluation-stage-card"><span class="evaluation-stage-badge">04 / Decide</span><h2>Bounded promotion</h2><p>Development evidence selects; recent benchmark and frozen audit only confirm. Unsupported or contaminated artifacts cannot promote a policy.</p><strong class="evaluation-stage-detail">Control is the default</strong></article>
       </div>
     </section>
 
-    <section class="evaluation-stage-grid" id="evaluation-stage-grid"></section>
+    <section class="panel evaluation-method-panel anomaly-evaluation-panel">
+      <div class="panel-header"><h2>Interventions tested</h2><p>All actions were explicit, reversible and compared with <code>anomaly_mode=off</code>.</p></div>
+      <div class="transfer-grid experiment-grid">
+        <article><span>Features</span><h3>Origin-known anomaly state</h3><p>Recent exceedance rate, severity history and days since an exceedance test whether regime instability helps the forecast.</p></article>
+        <article><span>Weights</span><h3>Bounded robust fitting</h3><p>Likely idiosyncratic historical labels can receive less influence, while minimum weights protect event spikes and systemic shocks.</p></article>
+        <article><span>Both</span><h3>Combined policy</h3><p>Feature and loss paths can be enabled together, but their interaction must beat the identical off-mode control.</p></article>
+        <article><span>Specialists</span><h3>Gates and blends</h3><p>Anomaly-aware and recent-regime specialists were framed as bounded candidates; historical preflight evidence is excluded from selection.</p></article>
+      </div>
+    </section>
 
-    <section class="panel-grid evaluation-two-column-grid">
-      <section class="panel evaluation-method-panel">
-        <div class="panel-header">
-          <h2>Forecast-generation strategies</h2>
-          <p>Both contracts were implemented; the current published submission uses the development-selected winner.</p>
-        </div>
-        <div class="definition-list" id="strategy-method-list"></div>
-      </section>
-
-      <section class="panel evaluation-method-panel">
-        <div class="panel-header">
-          <h2>Scoring contract</h2>
-          <p>The metric population is fixed before comparing model scores.</p>
-        </div>
+    <section class="panel-grid anomaly-two-column">
+      <section class="panel evaluation-method-panel anomaly-evaluation-panel">
+        <div class="panel-header"><h2>Evidence accepted</h2></div>
         <div class="definition-list">
-          <div class="definition-item evaluation-step-item"><strong>Conditional demand · primary</strong><span>Score only product-days on which the product was available. This estimates underlying customer demand rather than penalizing a model for inventory censorship.</span></div>
-          <div class="definition-item evaluation-step-item"><strong>Realized sales · diagnostic</strong><span>Score every observed product-day, including unavailable days. This measures what was sold under actual stock constraints, not the unconstrained demand target.</span></div>
-          <div class="definition-item evaluation-step-item"><strong>Common population</strong><span>For a comparison, retain rows with an actual value and valid predictions from every included model. Expected, predicted and scored row counts are reported explicitly.</span></div>
-          <div class="definition-item evaluation-step-item"><strong>Global aggregation</strong><span>Pool absolute errors and actual demand across the selected rows before computing WAPE. Large-volume product-days therefore receive proportionate operational weight.</span></div>
+          <div class="definition-item evaluation-step-item"><strong>Statistical audit</strong><span>Deterministic, checked-in causal score and context-novelty artifacts with source fingerprints.</span></div>
+          <div class="definition-item evaluation-step-item"><strong>Weight ablation</strong><span>The verified comparison selected control; weighting did not improve the development or recent benchmark objective.</span></div>
+          <div class="definition-item evaluation-step-item"><strong>V2 only when verified</strong><span>Autoencoder evidence remains unavailable unless schema, canonical inputs, outputs and provenance fingerprints validate.</span></div>
         </div>
       </section>
-    </section>
-
-    <section class="panel-grid evaluation-two-column-grid">
-      <section class="panel evaluation-method-panel">
-        <div class="panel-header">
-          <h2>Selection objective</h2>
-          <p>Development decisions are optimized for a January-like test week without inspecting test actuals.</p>
-        </div>
-        <div class="definition-list" id="selection-objective-list"></div>
-      </section>
-
-      <section class="panel evaluation-method-panel">
-        <div class="panel-header">
-          <h2>Leakage and overfitting controls</h2>
-          <p>Controls that make the reported OOF scores comparable to a real forecast made on January 11, 2026.</p>
-        </div>
+      <section class="panel evaluation-method-panel anomaly-evaluation-panel">
+        <div class="panel-header"><h2>Evidence excluded</h2></div>
         <div class="definition-list">
-          <div class="definition-item evaluation-step-item"><strong>Origin-relative features</strong><span>Rolling demand, market state and ordinary lags are calculated only from observations known at the fold origin.</span></div>
-          <div class="definition-item evaluation-step-item"><strong>Target-known covariates only</strong><span>Future calendar, campaign, discount, price and event variables are admitted only because they are supplied or knowable for the forecast dates.</span></div>
-          <div class="definition-item evaluation-step-item"><strong>No fold early-stopping leakage</strong><span>The seven-day evaluation block is never used as an early-stopping or hyperparameter-tuning set for the model being scored on it.</span></div>
-          <div class="definition-item evaluation-step-item"><strong>Development-only decisions</strong><span>Feature, loss, strategy and ensemble-weight decisions are made from development OOF. Recent benchmark and final audit have confirmation roles and do not refit those decisions.</span></div>
+          <div class="definition-item evaluation-step-item"><strong>Legacy compact autoencoder</strong><span>Excluded because preprocessing used future-derived medians.</span></div>
+          <div class="definition-item evaluation-step-item"><strong>Historical searches</strong><span>Contaminated benchmark evidence and unavailable result trees are archived, not inferred.</span></div>
+          <div class="definition-item evaluation-step-item"><strong>Weekend-v2 preflight</strong><span>Provenance-unverified and retained only as motivation; no weekend-v2 or final execution was run.</span></div>
         </div>
       </section>
     </section>
 
-    <section class="panel evaluation-method-panel">
-      <div class="panel-header">
-        <h2>Metric glossary</h2>
-        <p>Why several metrics are retained even though WAPE drives selection.</p>
-      </div>
-      <div class="metric-glossary-grid">
-        <article><strong>WAPE</strong><span>Σ|actual − prediction| / Σactual. Primary scale-weighted accuracy measure; lower is better.</span></article>
-        <article><strong>MAE</strong><span>Average absolute unit error. Easy to interpret directly in quantities.</span></article>
-        <article><strong>RMSE</strong><span>Square-root mean squared error. Penalizes occasional large misses more strongly than MAE.</span></article>
-        <article><strong>Bias</strong><span>Average prediction − actual. Positive means systematic over-forecasting; negative means under-forecasting.</span></article>
-        <article><strong>Bias ratio</strong><span>Total signed error divided by total actual demand. Makes aggregate directional bias comparable across periods.</span></article>
-        <article><strong>Coverage</strong><span>Share of expected rows for which a finite prediction exists. Accuracy is not accepted at the cost of missing difficult rows.</span></article>
-      </div>
+    <section class="panel anomaly-conclusion">
+      <span>Decision</span>
+      <h2>The negative result is the result</h2>
+      <p>The transferred anomaly methods produce useful diagnostics and a defensible review queue, but the verified forecasting evidence does not justify changing the submitted forecast. Control / <code>anomaly_mode=off</code> remains recommended.</p>
     </section>
   </main>
 
-  <footer>
-    <p id="footer-method-text">Loading canonical forecasting method…</p>
-  </footer>
-
+  <footer><p>No precision, recall or false-alarm rate is reported because no adjudicated anomaly labels exist.</p></footer>
   <script>window.STATIC_DASHBOARD = true;</script>
-  <script src="./common.js?v=15"></script>
-  <script src="./evaluation.js?v=2"></script>
+  <script src="./common.js?v=17"></script>
+  <script src="./evaluation.js?v=3"></script>
 </body>
 </html>
