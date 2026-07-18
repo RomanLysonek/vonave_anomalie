@@ -177,7 +177,7 @@
     },
     {
       "path": "data/published_results_manifest.json",
-      "sha256": "ef2e5f758b4f7adcc31182c5e1e9f66a23c6ef6d59fb430332f432171996f736",
+      "sha256": "c1e7d180de79444d7436bf253ea5ad43420b8a80690ce7634787cad2cd1c7f5e",
       "size": 14387
     },
     {
@@ -227,8 +227,8 @@
     },
     {
       "path": "styles.css",
-      "sha256": "e7ac4fb43d95becd769d19b661d126003ee9f780ec5450f950334265c711090e",
-      "size": 43364
+      "sha256": "7b6b9184329d64c8130fffc95c124e113201ff8017d9b811a6a55448f8a4f014",
+      "size": 43376
     }
   ],
   "generated_at": null,

@@ -60,7 +60,7 @@ PROMO_CHILD_CSS = """\
   white-space: nowrap;
 }"""
 PROMO_TABLET_CSS = """\
-@media (max-width: 700px) {
+@media (max-width: 800px) {
   .promo-bar {
     min-height: 57px;
     padding: 8px 24px;
@@ -74,7 +74,12 @@ PROMO_MOBILE_CSS = """\
     min-height: 89px;
     grid-template-columns: minmax(0, 1fr);
     row-gap: 8px;
-  }"""
+  }
+
+  .promo-bar > :nth-child(n) {
+    text-align: left;
+  }
+}"""
 
 EXPECTED_RULES = {
     "header.hero": {
@@ -192,6 +197,57 @@ def test_promo_geometry_matches_prediction_template(directory: Path) -> None:
     assert "width: 60%;" not in css
     assert "font-size: clamp(8.5px, 0.72vw, 10.5px);" not in css
     assert "research-ribbon" not in css
+
+
+def test_mobile_promo_computed_alignment_overrides_tablet_odd_even_rules() -> None:
+    css = (AUTHORED / "styles.css").read_text(encoding="utf-8")
+    candidates: list[tuple[str, str, int, int]] = []
+    for order, (selector_group, declarations) in enumerate(
+        _css_rules(css, ".promo-bar >")
+    ):
+        alignment = declarations.get("text-align")
+        if alignment is None:
+            continue
+        for selector in (part.strip() for part in selector_group.split(",")):
+            candidates.append(
+                (selector, alignment, selector.count(".") + selector.count(":"), order)
+            )
+
+    def matches(selector: str, child: int) -> bool:
+        token = selector.rsplit(":", 1)[-1]
+        return (
+            (token == "first-child" and child == 1)
+            or (token == "last-child" and child == 4)
+            or token == "nth-child(n)"
+            or (token == "nth-child(odd)" and child % 2 == 1)
+            or (token == "nth-child(even)" and child % 2 == 0)
+            or token == f"nth-child({child})"
+        )
+
+    computed = []
+    for child in range(1, 5):
+        applicable = [
+            (specificity, order, alignment)
+            for selector, alignment, specificity, order in candidates
+            if matches(selector, child)
+        ]
+        computed.append(max(applicable) if applicable else None)
+
+    assert [winner[2] for winner in computed if winner] == ["left"] * 4
+    assert ".promo-bar > * {\n    text-align: left;" not in css
+
+
+def test_desktop_promo_tracks_do_not_overlap_above_responsive_breakpoint() -> None:
+    viewport_width = 801
+    page_padding = 24 * 2
+    column_gaps = 24 * 3
+    measured_longest_label_width = 170
+    track_width = (viewport_width - page_padding - column_gaps) / 4
+    assert track_width >= measured_longest_label_width
+
+    css = (AUTHORED / "styles.css").read_text(encoding="utf-8")
+    assert "@media (max-width: 800px) {\n  .promo-bar {" in css
+    assert "@media (max-width: 700px) {\n  .promo-bar {" not in css
 
 
 @pytest.mark.parametrize("directory", (AUTHORED, GENERATED), ids=("authored", "generated"))

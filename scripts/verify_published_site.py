@@ -56,7 +56,7 @@ PROMO_CSS_CONTRACTS = (
   white-space: nowrap;
 }""",
     """\
-@media (max-width: 700px) {
+@media (max-width: 800px) {
   .promo-bar {
     min-height: 57px;
     padding: 8px 24px;
@@ -70,7 +70,12 @@ PROMO_CSS_CONTRACTS = (
     min-height: 89px;
     grid-template-columns: minmax(0, 1fr);
     row-gap: 8px;
-  }""",
+  }
+
+  .promo-bar > :nth-child(n) {
+    text-align: left;
+  }
+}""",
 )
 STRIP_GEOMETRY = {
     "box-sizing": "border-box",
@@ -353,6 +358,7 @@ def _verify_site_shell(docs: Path) -> None:
         any(contract not in active_css for contract in PROMO_CSS_CONTRACTS)
         or "width: 60%;" in active_css
         or "font-size: clamp(8.5px, 0.72vw, 10.5px);" in active_css
+        or ".promo-bar > * {\n    text-align: left;" in active_css
         or "research-ribbon" in css
     ):
         raise RuntimeError("Canonical promo-bar CSS contract failed")
