@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NOTINO - anomalie</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/styles.css?v=26" />
+  <link rel="stylesheet" href="/static/styles.css?v=27" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div class="bg-glow"></div>
 
-  <div class="promo-bar research-ribbon">
-    <span>Control comparator</span>
-    <span>7-day forecast</span>
-    <span>Walk-forward validated</span>
-    <span>Anomaly mode off</span>
+  <div class="promo-bar">
+    <a class="promo-dataset-link" data-dataset-link href="/dataset" title="The data structure and the modeling decisions it forced">30 Product Time Series</a>
+    <span id="promo-strategy">Anomaly Diagnostics</span>
+    <span id="promo-model-count">Control Retained</span>
+    <a class="promo-evaluation-link" data-evaluation-link href="/evaluation" title="Rolling forecast origins; not the same thing as recursive inference">Walk-Forward Validated</a>
   </div>
 
   <header class="hero">

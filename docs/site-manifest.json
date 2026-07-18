@@ -17,8 +17,8 @@
     },
     {
       "path": "common.js",
-      "sha256": "7d515921fee9b044b446a444b29bf4ea1b48c4e93301fc3dd7ea0981c37baf19",
-      "size": 7656
+      "sha256": "0a9f56e431e02167365baad4b8b12e258219cd66bbbc9f854fecc3982edcfe65",
+      "size": 7353
     },
     {
       "path": "data/anomaly-dashboard-v2.json",
@@ -177,7 +177,7 @@
     },
     {
       "path": "data/published_results_manifest.json",
-      "sha256": "e4a5ff49e3c7c4b11ca7cb910ea0e7b168c0d04f3a1df1a39907c9bba85e5f29",
+      "sha256": "c1e7d180de79444d7436bf253ea5ad43420b8a80690ce7634787cad2cd1c7f5e",
       "size": 14387
     },
     {
@@ -187,8 +187,8 @@
     },
     {
       "path": "dataset.html",
-      "sha256": "f9ec5040af6648f8112feb9458a573188c071e6dd2661f3e587742a024a3cd7c",
-      "size": 5835
+      "sha256": "828a650e2312cd565f085afcd0726435d139d6b7feaa52e888904c637858c9c4",
+      "size": 6158
     },
     {
       "path": "dataset.js",
@@ -197,8 +197,8 @@
     },
     {
       "path": "evaluation.html",
-      "sha256": "3ffef48347a6363b0009bf42961b2ae03ad7817c2dddf09c5d2f91bb187c3f1d",
-      "size": 6630
+      "sha256": "9274f30c28efd6e8108aadf0af2bd4baa987a29955be50bffc9e69c405376268",
+      "size": 6954
     },
     {
       "path": "evaluation.js",
@@ -212,13 +212,13 @@
     },
     {
       "path": "index.html",
-      "sha256": "54ead594ed600346f17729d3c3054bd2ff9b0a27039b823a005a279fe5e2b2fc",
-      "size": 7204
+      "sha256": "911a9fb9de1dee3d047d16ff656a2d8200a936b76556d28a0b2e97fa0d08a080",
+      "size": 7495
     },
     {
       "path": "model.html",
-      "sha256": "5e77b95e80d1e7523d00f02cf63069355181e239836e01f209561e0b3605a2fc",
-      "size": 4306
+      "sha256": "2b5602f3ad71093809c9c7ddff5f230cbe36d58e38b09ed945907677f49f6c1f",
+      "size": 4613
     },
     {
       "path": "model.js",
@@ -227,8 +227,8 @@
     },
     {
       "path": "styles.css",
-      "sha256": "5d9422f6113781ccd90469d0909c58185495578597f0b2c681d45b72d4882299",
-      "size": 43408
+      "sha256": "7b6b9184329d64c8130fffc95c124e113201ff8017d9b811a6a55448f8a4f014",
+      "size": 43376
     }
   ],
   "generated_at": null,

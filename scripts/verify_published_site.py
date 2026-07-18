@@ -16,6 +16,67 @@ SITE_PAGES = ("index.html", "dataset.html", "evaluation.html", "model.html")
 PAGE_TITLE = "NOTINO - anomalie"
 HEADER_TITLE = "Quantity Forecast Dashboard"
 HEADER_BRAND = ("NOTINO", "ANOMALIE")
+PROMO_MARKUP_TEMPLATE = (
+    '<div class="promo-bar"> '
+    '<a class="promo-dataset-link" data-dataset-link href="{dataset_href}" '
+    'title="The data structure and the modeling decisions it forced">'
+    '30 Product Time Series</a> '
+    '<span id="promo-strategy">Anomaly Diagnostics</span> '
+    '<span id="promo-model-count">Control Retained</span> '
+    '<a class="promo-evaluation-link" data-evaluation-link href="{evaluation_href}" '
+    'title="Rolling forecast origins; not the same thing as recursive inference">'
+    'Walk-Forward Validated</a> </div>'
+)
+PROMO_CSS_CONTRACTS = (
+    """\
+.promo-bar {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px var(--page-padding-inline);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: center;
+  column-gap: 24px;
+  background: #fff;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}""",
+    """\
+.promo-bar > * {
+  min-width: 0;
+  white-space: nowrap;
+}""",
+    """\
+@media (max-width: 800px) {
+  .promo-bar {
+    min-height: 57px;
+    padding: 8px 24px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 24px;
+    row-gap: 8px;
+  }""",
+    """\
+@media (max-width: 480px) {
+  .promo-bar {
+    min-height: 89px;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 8px;
+  }
+
+  .promo-bar > :nth-child(n) {
+    text-align: left;
+  }
+}""",
+)
 STRIP_GEOMETRY = {
     "box-sizing": "border-box",
     "width": "100%",
@@ -231,8 +292,22 @@ class _ShellParser(HTMLParser):
 
 
 def _verify_page_shell(path: Path) -> None:
+    source = path.read_text(encoding="utf-8")
+    promos = re.findall(r'<div class="promo-bar">.*?</div>', source, re.DOTALL)
+    static_dashboard = "window.STATIC_DASHBOARD = true" in source
+    expected_promo = PROMO_MARKUP_TEMPLATE.format(
+        dataset_href="./dataset.html" if static_dashboard else "/dataset",
+        evaluation_href="./evaluation.html" if static_dashboard else "/evaluation",
+    )
+    if (
+        len(promos) != 1
+        or re.sub(r"\s+", " ", promos[0]).strip() != expected_promo
+        or "research-ribbon" in source
+    ):
+        raise RuntimeError(f"Generated promo-bar contract failed: {path.name}")
+
     parser = _ShellParser()
-    parser.feed(path.read_text(encoding="utf-8"))
+    parser.feed(source)
     parser.close()
     if parser.titles != [PAGE_TITLE]:
         raise RuntimeError(f"Generated page title contract failed: {path.name}")
@@ -278,6 +353,15 @@ def _verify_site_shell(docs: Path) -> None:
     active_css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
     if responsive_contract not in active_css:
         raise RuntimeError("Canonical responsive media-query scope failed")
+
+    if (
+        any(contract not in active_css for contract in PROMO_CSS_CONTRACTS)
+        or "width: 60%;" in active_css
+        or "font-size: clamp(8.5px, 0.72vw, 10.5px);" in active_css
+        or ".promo-bar > * {\n    text-align: left;" in active_css
+        or "research-ribbon" in css
+    ):
+        raise RuntimeError("Canonical promo-bar CSS contract failed")
 
     rules = _css_rules(css, ".description-strip")
     if tuple(selector for selector, _ in rules) != DESCRIPTION_STRIP_SELECTORS:
