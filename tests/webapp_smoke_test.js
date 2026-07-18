@@ -10,12 +10,25 @@ const root = path.resolve(__dirname, "..");
 const staticDir = path.join(root, "webapp", "static");
 
 function checkSyntax() {
-  for (const name of ["common.js", "app.js", "model.js", "evaluation.js", "dataset.js"]) {
+  for (const name of ["common.js", "app.js", "model.js", "evaluation.js", "dataset.js", "anomalies.js"]) {
     const result = spawnSync(process.execPath, ["--check", path.join(staticDir, name)], {
       encoding: "utf8",
     });
     assert.strictEqual(result.status, 0, `${name} syntax check failed:\n${result.stderr}`);
   }
+
+}
+
+function checkStaticAnomalyContract() {
+  const source = fs.readFileSync(path.join(staticDir, "anomalies.js"), "utf8");
+  assert.ok(source.includes("./data/anomaly-dashboard-v2.json"));
+  assert.ok(source.includes("data/anomaly-products-v2/product-"));
+  assert.ok(source.includes('toLocaleString("en-GB"'));
+  assert.ok(!source.includes("/api/anomaly-lab"));
+  assert.ok(!source.includes("setInterval"));
+  const html = fs.readFileSync(path.join(staticDir, "anomalies.html"), "utf8");
+  assert.ok(html.includes("NOTINO / Interview Assignment"));
+  assert.ok(html.includes("anomaly_mode=off"));
 }
 
 function checkStrategyHelpers() {
@@ -451,4 +464,5 @@ checkModelMethodDescriptions();
 checkEvaluationMethodology();
 checkDatasetStory();
 checkSubmissionGridMarkup();
-console.log("8 JavaScript smoke checks passed");
+checkStaticAnomalyContract();
+console.log("9 JavaScript smoke checks passed");

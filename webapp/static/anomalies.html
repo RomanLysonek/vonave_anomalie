@@ -1,106 +1,73 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-GB">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Voňavé Anomálie — Anomaly Lab</title>
+  <title>NOTINO / Interview Assignment — Anomaly Research</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/styles.css?v=22" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
-  <div class="bg-glow"></div>
+  <nav class="suite-shell" aria-label="Interview assignment suite">
+    <strong>NOTINO / Interview Assignment</strong>
+    <div>
+      <a href="https://romanlysonek.github.io/vonava_predikce/">Classical Forecasting</a>
+      <a href="https://romanlysonek.github.io/vonave_anomalie/" aria-current="page">Anomaly Research</a>
+      <a href="https://romanlysonek.github.io/vonavy_chronos/">Chronos-2 Challenger</a>
+    </div>
+  </nav>
 
   <div class="promo-bar">
-    <a class="promo-dataset-link" data-dataset-link href="/dataset" title="The data structure and the modeling decisions it forced">30 Product Time Series</a>
+    <a class="promo-dataset-link" data-dataset-link href="dataset.html" title="The data structure and the modeling decisions it forced">30 Product Time Series</a>
     <span id="promo-strategy">7-Day Forecast</span>
     <span id="promo-model-count">Research Models Compared</span>
-    <a class="promo-evaluation-link" data-evaluation-link href="/evaluation" title="Rolling forecast origins; not the same thing as recursive inference">Walk-Forward Validated</a>
+    <a class="promo-evaluation-link" data-evaluation-link href="evaluation.html" title="Rolling forecast origins; not the same thing as recursive inference">Walk-Forward Validated</a>
   </div>
 
   <header class="hero">
     <div class="hero-top">
       <div class="brand">
         <span class="brand-logo">NOTINO</span>
-        <span class="brand-tagline anomaly-brand-tagline">VOŇAVÉ ANOMÁLIE</span>
+        <span class="brand-tagline anomaly-brand-tagline">ANOMALY RESEARCH</span>
       </div>
-      <div class="hero-title-block">
-        <h1>Forecast + Anomaly Research Dashboard</h1>
-      </div>
+      <div class="hero-title-block"><h1>Forecast + Anomaly Research Dashboard</h1></div>
     </div>
     <nav class="site-nav" id="site-nav"></nav>
   </header>
 
-  <header class="model-hero page-description-strip" style="--mc:#f59e0b">
-    <span class="model-badge">Research extension</span>
-    <h1>Anomaly Lab</h1>
-    <p class="blurb">Statistical and autoencoder signals are tested as features, training weights and bounded specialist forecasts against the canonical NeuralNet. Baseline models remain in the Overview comparison; dedicated research detail is focused on the NeuralNet control, anomaly specialists and meta-policies.</p>
+  <header class="model-hero page-description-strip" style="--mc:#b76600">
+    <span class="model-badge">Research snapshot</span>
+    <h1>Anomaly Research</h1>
+    <p class="blurb">A static, content-addressed review of unlabelled threshold exceedances and their measured forecasting contribution.</p>
   </header>
 
   <main id="app" class="anomaly-app">
+    <section class="snapshot-banner" id="snapshot-banner" aria-live="polite">
+      <strong>Loading published snapshot…</strong>
+    </section>
+
     <section class="anomaly-intro">
       <div>
-        <span class="eyebrow">Decision framework</span>
-        <h2>Do unusual demand regimes improve the forecast?</h2>
-        <p>
-          This page separates three questions that are often conflated: which historical observations are unusual,
-          whether an autoencoder detects persistent regime shifts, and whether any of that signal adds out-of-sample
-          value to the canonical NeuralNet.
-        </p>
+        <h2>No anomaly truth labels exist</h2>
+        <p>Threshold exceedances are review signals, not truth-labelled anomalies. Known campaign and event rows are explanatory proxies, not labels. This is not a validated anomaly detector.</p>
       </div>
       <div class="anomaly-decision-card" id="anomaly-decision-card">
-        <span class="status-dot status-running"></span>
+        <span class="status-dot status-running" aria-hidden="true"></span>
         <div>
-          <strong id="anomaly-decision-title">Loading research decision…</strong>
-          <p id="anomaly-decision-copy">Reading the latest audit and search artifacts.</p>
+          <strong id="anomaly-decision-title">Loading current recommendation…</strong>
+          <p id="anomaly-decision-copy"></p>
         </div>
       </div>
     </section>
 
-    <section class="kpi-grid anomaly-kpi-grid" id="anomaly-kpi-grid">
-      <div class="kpi-card skeleton"></div>
-      <div class="kpi-card skeleton"></div>
-      <div class="kpi-card skeleton"></div>
-      <div class="kpi-card skeleton"></div>
-      <div class="kpi-card skeleton"></div>
-      <div class="kpi-card skeleton"></div>
-    </section>
-
-    <section class="panel anomaly-method-panel">
-      <div class="panel-header">
-        <h2>Three layers, three different meanings</h2>
-        <p>An anomaly score is not automatically a bad row and it is not automatically a better forecast.</p>
-      </div>
-      <div class="anomaly-method-grid">
-        <article>
-          <span class="method-index">01</span>
-          <h3>Statistical surprise</h3>
-          <p>Compares each product-day with causal same-weekday history, robustly normalizes the residual and calibrates an extreme tail threshold.</p>
-          <strong>Question answered</strong>
-          <span>“Was this observation unusually far from its recent seasonal expectation?”</span>
-        </article>
-        <article>
-          <span class="method-index">02</span>
-          <h3>Systemic reconstruction risk</h3>
-          <p>Trains neural autoencoders on multivariate 28–84 day windows and scores demand regimes that are difficult to reconstruct.</p>
-          <strong>Question answered</strong>
-          <span>“Does the whole market currently look unlike learned historical regimes?”</span>
-        </article>
-        <article>
-          <span class="method-index">03</span>
-          <h3>Forecast contribution</h3>
-          <p>Injects anomaly state as bounded features, weights or specialist models and validates marginal value on walk-forward OOF predictions.</p>
-          <strong>Question answered</strong>
-          <span>“Does this information improve WAPE after the main forecaster already sees price, campaign and calendar context?”</span>
-        </article>
-      </div>
-    </section>
+    <section class="kpi-grid anomaly-kpi-grid" id="anomaly-kpi-grid" aria-label="Audit summary"></section>
 
     <section class="panel">
       <div class="panel-header row">
         <div>
-          <h2>Product anomaly explorer</h2>
-          <p>Observed demand, causal expectation and anomaly severity for one product.</p>
+          <h2>Product threshold-exceedance explorer</h2>
+          <p>Observed demand, causal expectation and calibrated score from the checked-in audit.</p>
         </div>
         <div class="controls">
           <div class="control-group">
@@ -119,15 +86,11 @@
         </div>
       </div>
       <div class="anomaly-product-summary" id="anomaly-product-summary"></div>
-      <div class="chart-wrap anomaly-chart-tall">
-        <canvas id="chart-product-anomalies"></canvas>
-      </div>
-      <div class="diagnostic-note compact anomaly-legend-note">
-        Orange points are statistically flagged product-days. Gold vertical context is explainable campaign/event activity; a flag is therefore evidence for inspection, not automatic deletion.
-      </div>
-      <div class="table-wrap diagnostic-table-wrap">
+      <div class="chart-wrap anomaly-chart-tall"><canvas id="chart-product-anomalies"></canvas></div>
+      <div class="diagnostic-note compact">Amber marks score exceedances for review. Event context can explain a row; it does not turn that row into a labelled anomaly.</div>
+      <div class="table-wrap">
         <table class="data-table" id="product-anomaly-table">
-          <thead><tr><th>Date</th><th>Actual</th><th>Expected</th><th>Score</th><th>Signed residual</th><th>Event</th><th>Training weight</th></tr></thead>
+          <thead><tr><th>Date</th><th>Actual</th><th>Expected</th><th>Score</th><th>Context</th><th>Training weight</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -135,152 +98,40 @@
 
     <section class="panel-grid anomaly-two-column">
       <section class="panel">
-        <div class="panel-header">
-          <h2>Market-level anomaly timeline</h2>
-          <p>Daily demand volume, number of local flags and systemic tail events.</p>
-        </div>
-        <div class="chart-wrap anomaly-chart-tall">
-          <canvas id="chart-systemic-timeline"></canvas>
-        </div>
+        <div class="panel-header"><h2>Market-level review timeline</h2><p>Daily demand and count of product-level threshold exceedances.</p></div>
+        <div class="chart-wrap anomaly-chart-tall"><canvas id="chart-systemic-timeline"></canvas></div>
       </section>
-
       <section class="panel">
-        <div class="panel-header">
-          <h2>Most extreme local observations</h2>
-          <p>Highest calibrated scores across all products.</p>
-        </div>
+        <div class="panel-header"><h2>Highest scores</h2><p>Review queue only; no ground-truth classification is implied.</p></div>
         <div class="table-wrap anomaly-scroll-table">
           <table class="data-table" id="top-local-table">
-            <thead><tr><th>Product</th><th>Date</th><th>Actual</th><th>Expected</th><th>Score</th><th>Interpretation</th></tr></thead>
+            <thead><tr><th>Product</th><th>Date</th><th>Actual</th><th>Expected</th><th>Score</th><th>Context</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
       </section>
-    </section>
-
-    <section class="panel autoencoder-panel">
-      <div class="panel-header row">
-        <div>
-          <h2>Autoencoder regime diagnostics</h2>
-          <p>Reconstruction error is useful only when it is temporally stable and calibrated out of sample.</p>
-        </div>
-        <div class="control-group">
-          <label for="autoencoder-run-select">Training split</label>
-          <select id="autoencoder-run-select"></select>
-        </div>
-      </div>
-      <div class="autoencoder-diagnostic-strip" id="autoencoder-diagnostic-strip"></div>
-      <div class="chart-wrap anomaly-chart-tall">
-        <canvas id="chart-autoencoder"></canvas>
-      </div>
-      <div class="panel-grid compact-grid anomaly-diagnostic-grid">
-        <div class="diagnostic-note" id="autoencoder-interpretation"></div>
-        <div class="table-wrap">
-          <table class="data-table" id="autoencoder-split-table">
-            <thead><tr><th>Split</th><th>Windows</th><th>Flagged</th><th>Flag rate</th><th>Mean score</th><th>Max score</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
     </section>
 
     <section class="panel-grid anomaly-two-column">
       <section class="panel">
-        <div class="panel-header">
-          <h2>Test-week context novelty</h2>
-          <p>Future-known price, campaign and calendar conditions only—never future sales.</p>
-        </div>
-        <div class="chart-wrap">
-          <canvas id="chart-context-risk"></canvas>
-        </div>
+        <div class="panel-header"><h2>Future-known context</h2><p>Price, campaign and calendar diagnostics only—never future sales.</p></div>
+        <div class="chart-wrap"><canvas id="chart-context-risk"></canvas></div>
         <div class="diagnostic-note compact" id="context-risk-note"></div>
       </section>
-
       <section class="panel">
-        <div class="panel-header">
-          <h2>Highest-risk test rows</h2>
-          <p>Products closest to the edge of the historical context distribution.</p>
-        </div>
-        <div class="table-wrap">
-          <table class="data-table" id="context-risk-table">
-            <thead><tr><th>Product</th><th>Date</th><th>Percentile</th><th>Raw score</th><th>Shift flag</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
+        <div class="panel-header"><h2>Evidence availability</h2><p>Unsupported result trees are never inferred.</p></div>
+        <div class="evidence-list" id="evidence-list"></div>
       </section>
     </section>
 
-    <section class="panel anomaly-search-panel">
-      <div class="panel-header row">
-        <div>
-          <h2>Overnight anomaly search</h2>
-          <p>Broad diagnostic search → forecast proxy → NeuralNet → multi-seed confirmation.</p>
-        </div>
-        <span class="winner-badge" id="overnight-status-badge">—</span>
-      </div>
-      <div class="search-funnel" id="overnight-funnel"></div>
-      <div class="panel-grid anomaly-two-column">
-        <div>
-          <h3 class="subsection-title">Best diagnostic representations</h3>
-          <div class="table-wrap anomaly-scroll-table">
-            <table class="data-table" id="diagnostic-leaderboard-table">
-              <thead><tr><th>Representation</th><th>Error rank lift</th><th>Error correlation</th><th>Seed stability</th><th>Time drift</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-        <div>
-          <h3 class="subsection-title">Confirmed NeuralNet candidates</h3>
-          <div class="chart-wrap">
-            <canvas id="chart-confirmation"></canvas>
-          </div>
-        </div>
-      </div>
-      <div class="diagnostic-note" id="overnight-conclusion"></div>
-    </section>
-
-    <section class="panel weekend-panel">
-      <div class="panel-header row">
-        <div>
-          <h2>Weekend-v2 specialist search</h2>
-          <p>Anomaly models compete as bounded specialists alongside recent-regime and loss-diverse NeuralNets.</p>
-        </div>
-        <span class="winner-badge" id="weekend-status-badge">Not started</span>
-      </div>
-      <div class="weekend-stage-grid" id="weekend-stage-grid"></div>
+    <section class="panel">
+      <div class="panel-header"><h2>Historical Weekend-v2 preflight</h2><p>Contaminated/unverified and excluded from current evidence.</p></div>
       <div class="diagnostic-note" id="weekend-preflight-note"></div>
-      <div class="panel-grid anomaly-two-column">
-        <div>
-          <h3 class="subsection-title">Current candidate leaderboard</h3>
-          <div class="table-wrap anomaly-scroll-table">
-            <table class="data-table" id="weekend-candidate-table">
-              <thead><tr><th>Candidate</th><th>Family</th><th>Dev WAPE</th><th>Benchmark WAPE</th><th>Dev Δ</th><th>Benchmark Δ</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-        <div>
-          <h3 class="subsection-title">Meta-policy / ensemble comparison</h3>
-          <div class="table-wrap anomaly-scroll-table">
-            <table class="data-table" id="weekend-ensemble-table">
-              <thead><tr><th>Policy</th><th>Dev gain</th><th>Benchmark gain</th><th>Bootstrap P</th><th>Accepted</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      <div class="anomaly-final-command" id="weekend-final-command" hidden>
-        <strong>Generated final command</strong>
-        <code></code>
-      </div>
     </section>
   </main>
 
-  <footer>
-    <p>VOŇAVÉ ANOMÁLIE · anomaly detection is promoted only when it adds leakage-safe out-of-sample forecast value.</p>
-  </footer>
-
-  <script src="/static/common.js?v=15"></script>
-  <script src="/static/anomalies.js?v=2"></script>
+  <footer><p>Control / <code>anomaly_mode=off</code> is the current recommendation.</p></footer>
+  <script src="/static/common.js?v=16"></script>
+  <script src="/static/anomalies.js?v=3"></script>
 </body>
 </html>

@@ -1,5 +1,11 @@
 # Real-data test results
 
+> No anomaly truth labels exist, so this is not a validated anomaly detector.
+> Known events are explanatory proxies, not labels. Standalone anomaly policies
+> did not beat the control; `anomaly_mode=off` remains recommended. Compact
+> autoencoder results are legacy and excluded because preprocessing used
+> future-derived medians; fingerprinted V2 is canonical.
+
 ## Decision
 
 **Do not promote anomaly weighting or the current autoencoder into the final forecasting model.**
@@ -36,8 +42,8 @@ The autoencoder was **not** trained on all 1,810 windows. Temporal holdouts were
 | Local anomalies | 485 (0.941%) |
 | Systemic anomaly days | 35 |
 | Local threshold | 4.2773 |
-| Local validation false-alarm rate | 0.494% (target 1.0%) |
-| Systemic validation false-alarm rate | 1.385% (target 2.0%) |
+| Local validation exceedance rate | 0.494% (target 1.0%) |
+| Systemic validation exceedance rate | 1.385% (target 2.0%) |
 | Flagged local anomalies on known events | 191 (39.4%) |
 | Mean weight among flagged rows | 0.7327 |
 | Mean weight across all rows | 0.9975 |
@@ -98,10 +104,10 @@ The effect was heterogeneous: default weighting helped the 2025-02-10 origin (`0
 | Epochs | 40 |
 | Final train loss | 0.300054 |
 | Flagged windows | 64 |
-| Validation false-alarm rate | 33.33% (target 2.0%) |
+| Validation exceedance rate | 33.33% (target 2.0%) |
 | Score/date correlation | 0.758 |
 
-The threshold is not trustworthy: calibration false alarms reached 33.3%. Scores increase strongly with date, and the largest cluster covers Christmas/New Year 2025–2026. The network mostly learned the early-history regime and treated later distributional change as reconstruction failure.
+The threshold is not trustworthy: validation exceedances reached 33.3%. Scores increase strongly with date, and the largest cluster covers Christmas/New Year 2025–2026. This compact run is excluded from canonical evidence because preprocessing used future-derived medians.
 
 ### More recent training split
 

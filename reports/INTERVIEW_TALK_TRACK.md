@@ -1,5 +1,12 @@
 # Interview talk track: why DAVID belongs here—and where it does not
 
+The headline is deliberately conservative: there are no anomaly truth labels,
+known events are explanatory proxies, and this is not a validated anomaly
+detector. Standalone anomaly policies did not beat the control. The current
+recommendation is `anomaly_mode=off`; compact-autoencoder evidence is excluded,
+fingerprinted V2 is canonical, historical overnight/search/preflight evidence is
+contaminated and unverified, and weekend-v2 was not run.
+
 ## 90-second version
 
 My original solution is a leakage-safe seven-day direct demand forecaster. I also maintain DAVID, a substantially larger anomaly-detection framework, so I asked a deliberately difficult question: can any of its methodology improve this small retail task without turning the repository into architecture theatre?
@@ -25,7 +32,7 @@ For each product-day I build an expected quantity from available observations at
 
 ### 3. Tail calibration
 
-Instead of saying “anything above three sigma is anomalous,” I fit a Generalized Pareto Distribution to exceedances over candidate thresholds. The selected threshold balances target false-alarm rate on a later temporal block and tail goodness of fit. When the tail is too small, the method falls back to an empirical quantile rather than forcing an unstable EVT estimate.
+Instead of saying “anything above three sigma is anomalous,” I fit a Generalized Pareto Distribution to exceedances over candidate thresholds. The selected threshold balances a target validation exceedance rate on a later temporal block and tail goodness of fit. When the tail is too small, the method falls back to an empirical quantile rather than forcing an unstable EVT estimate.
 
 ### 4. Local versus systemic events
 
@@ -61,7 +68,7 @@ Because anomaly means improbable under a reference distribution, not incorrect. 
 
 ### “Why EVT rather than a z-score?”
 
-The score distribution is non-Gaussian and heterogeneous. EVT models the exceedance tail directly and lets me target a false-alarm probability. I still retain an empirical fallback because this dataset is small; refusing an unstable parametric fit is part of the method.
+The score distribution is non-Gaussian and heterogeneous. EVT models the exceedance tail directly and lets me target a validation alert rate. I still retain an empirical fallback because this dataset is small; refusing an unstable parametric fit is part of the method.
 
 ### “Is weighting by the target an information leak?”
 

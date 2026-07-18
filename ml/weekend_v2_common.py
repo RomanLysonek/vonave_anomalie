@@ -19,7 +19,6 @@ import pandas as pd
 
 from anomaly_search_common import (
     apply_candidate_config,
-    autoencoder_action_variants,
     candidate,
     control_candidate,
     load_json,
@@ -76,47 +75,29 @@ def _dedupe(items: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _load_prior_best_stat(prior_root: Path) -> dict[str, Any] | None:
-    recommendation = prior_root / "recommendation.json"
-    if recommendation.exists():
-        payload = load_json(recommendation)
-        comparisons = payload.get("comparisons", [])
-        statistical = [
-            row for row in comparisons
-            if row.get("candidate", {}).get("family") == "statistical"
-        ]
-        if statistical:
-            statistical.sort(
-                key=lambda row: (
-                    row.get("development_relative_improvement", -999.0),
-                    -row.get("benchmark_relative_change", 999.0),
-                ),
-                reverse=True,
-            )
-            return statistical[0]["candidate"]
-    candidate_path = prior_root / "candidates" / "stat-322e3ec6f7ee.json"
-    return load_json(candidate_path) if candidate_path.exists() else None
+    # Legacy overnight/search outputs may contain benchmark-target contamination.
+    # They are retained for audit only and are never candidate-generation evidence.
+    return None
 
 
 def generate_statistical_neighborhood(
     count: int, *, seed: int, prior_root: Path
 ) -> list[dict[str, Any]]:
-    """Generate a local but policy-diverse search around the overnight near-winner."""
-    prior = _load_prior_best_stat(prior_root)
-    base = dict((prior or {}).get("config", {}))
-    if not base:
-        base = {
-            "anomaly_mode": "both",
-            "anomaly_source": "statistical",
-            "anomaly_rolling_window": 90,
-            "anomaly_min_history": 21,
-            "anomaly_scale_floor": 0.40,
-            "anomaly_evt_alpha": 0.05,
-            "anomaly_evt_tail_quantile": 0.95,
-            "anomaly_weight_strength": 0.30,
-            "anomaly_min_weight": 0.75,
-            "anomaly_known_event_min_weight": 0.90,
-            "anomaly_systemic_min_weight": 0.70,
-        }
+    """Generate policy-diverse candidates from pre-specified framework defaults."""
+    _ = prior_root
+    base = {
+        "anomaly_mode": "both",
+        "anomaly_source": "statistical",
+        "anomaly_rolling_window": 180,
+        "anomaly_min_history": 28,
+        "anomaly_scale_floor": 0.10,
+        "anomaly_evt_alpha": 0.01,
+        "anomaly_evt_tail_quantile": 0.90,
+        "anomaly_weight_strength": 1.0,
+        "anomaly_min_weight": 0.20,
+        "anomaly_known_event_min_weight": 0.65,
+        "anomaly_systemic_min_weight": 0.50,
+    }
     base.setdefault("anomaly_weight_policy", "downweight")
     base.setdefault("anomaly_max_weight", 2.0)
 
@@ -147,7 +128,7 @@ def generate_statistical_neighborhood(
     rng = np.random.default_rng(seed)
     choices = {
         "anomaly_mode": ["features", "weight", "both"],
-        "anomaly_rolling_window": [45, 60, 90, 120, 180, 270],
+        "anomaly_rolling_window": [45, 60, 120, 180, 270],
         "anomaly_min_history": [14, 21, 28, 42, 56],
         "anomaly_scale_floor": [0.15, 0.25, 0.40, 0.60],
         "anomaly_evt_alpha": [0.01, 0.02, 0.05, 0.10],
@@ -235,21 +216,7 @@ def generate_regime_specialists(count: int) -> list[dict[str, Any]]:
 def load_top_autoencoder_specialists(
     prior_root: Path, count: int
 ) -> list[dict[str, Any]]:
-    leaderboard = prior_root / "diagnostic_leaderboard.csv"
-    if not leaderboard.exists() or count <= 0:
-        return []
-    rows = pd.read_csv(leaderboard).head(count)
-    output: list[dict[str, Any]] = []
-    for candidate_id in rows["candidate_id"].astype(str):
-        path = prior_root / "candidates" / f"{candidate_id}.json"
-        if not path.exists():
-            continue
-        base = load_json(path)
-        variants = autoencoder_action_variants(base)
-        # Features-only is the safer interpretation of the strong risk signal;
-        # combined mode is retained as a deliberately different specialist.
-        output.extend(variants)
-    return output
+    return []
 
 
 def generate_weekend_v2_candidates(

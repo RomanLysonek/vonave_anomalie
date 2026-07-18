@@ -1,4 +1,11 @@
-# Overnight anomaly search on Apple Silicon
+# Overnight anomaly search methodology
+
+> **Scientific status: contaminated; provenance status: unverified.** Historical
+> overnight, diagnostic, and search artifacts may include benchmark-target
+> observations in diagnostic cutoffs or next-seven-day difficulty targets. They
+> are retained only for audit, excluded from all current candidate/selection
+> evidence, and must not be resumed as valid evidence. The current recommendation
+> remains control with `anomaly_mode=off`.
 
 ## Purpose
 
@@ -114,6 +121,13 @@ The randomized but deterministic search varies:
 
 ### Temporal validity
 
+New diagnostics persist a development-only boundary derived from the earliest
+frozen benchmark origin. The source partition ends one day before that origin;
+each diagnostic cutoff ends at least seven additional days earlier, so every
+input date and every next-seven-day difficulty target is strictly pre-benchmark.
+Boundary dates, partition identity, and partition content hash are fingerprinted,
+and overlap is rejected before fitting or scoring.
+
 Every run uses disjoint chronological partitions:
 
 ```text
@@ -152,6 +166,11 @@ outputs/overnight_anomaly_search/autoencoder_cache/
 ```
 
 The cache key includes the fold end date, data extent and complete autoencoder configuration. A later fold or different configuration cannot silently reuse stale scores.
+The source fingerprint is limited to the explicit transitive autoencoder
+training/scoring files, so publication-only edits do not invalidate it. A
+missing/new cache may be built only when an explicit training/search entrypoint
+sets `allow_autoencoder_cache_build`; stale or corrupt caches additionally
+require `--confirm-recompute-stale`.
 
 ## Stage 3: MPS NeuralNet screening
 
@@ -188,7 +207,6 @@ outputs/overnight_anomaly_search/
 ├── neural_leaderboard.csv
 ├── confirmation_leaderboard.csv
 ├── recommendation.json
-├── winner_candidate.json
 └── FINAL_REPORT.md
 ```
 
@@ -200,31 +218,12 @@ Every forecast trial directory contains:
 - per-fold checkpoints;
 - `trial.log`.
 
-## Producing the final forecast
+## Archived recommendation evidence
 
-After confirmation, `recommendation.json` contains the exact final command. The winner can also be applied directly:
-
-```bash
-caffeinate -dimsu uv run python ml/pipeline.py \
-  --forecast-strategy direct \
-  --primary-strategy direct \
-  --submission-model NeuralNet \
-  --selection-metric WAPE \
-  --selection-protocol test-aligned \
-  --training-window-days all \
-  --recency-half-life-days none \
-  --baseline-variant weighted_4321 \
-  --trend-features off \
-  --c2-feature-groups price,campaign,lifecycle,market,event \
-  --nn-loss mse \
-  --nn-target-mode residual \
-  --anomaly-config outputs/overnight_anomaly_search/winner_candidate.json \
-  --nn-batch-size auto \
-  --nn-training-backend auto \
-  --resume
-```
-
-`--anomaly-config` accepts the candidate JSON and reproduces every statistical and autoencoder setting. Explicit anomaly CLI switches override values from the file.
+Overnight recommendations are archived and unverified. They set
+`execution_enabled=false`, do not create a winner configuration, and do not
+publish a pipeline command. They cannot be used for final execution until an
+independently trusted JSON-only recommendation contract exists.
 
 ## Leakage contract
 

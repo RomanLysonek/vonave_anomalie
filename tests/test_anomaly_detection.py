@@ -67,6 +67,9 @@ def test_evt_calibration_returns_finite_upper_tail_threshold():
     assert np.isfinite(result.threshold)
     assert result.threshold >= np.quantile(scores, 0.80)
     assert result.method in {"evt_pot_gpd", "empirical_quantile_fallback"}
+    payload = result.to_dict()
+    assert "validation_exceedance_rate" in payload
+    assert "validation_far" not in payload
 
 
 def test_unexplained_spike_is_scored_and_downweighted():

@@ -9,3 +9,18 @@ This repository was created from the three user-supplied archives below on 2026-
 | `vonava_predikce-main(5).zip` | `9de6438769aa18d1415a44ff128dfe9952fdd0bef679ae20495628c2d6c3db88` | forecasting base repository |
 
 No DAVID or DBAAS source package is vendored into this repository. The implementation is a problem-specific adaptation so the project remains independently runnable and reviewable.
+
+## Published dashboard snapshot
+
+The canonical site is generated only from checked-in `outputs/results.json`,
+`outputs/anomaly_audit_real/`, and `reports/weekend_v2_preflight.json`.
+`outputs/published_results_manifest.json` records the actual content, source,
+configuration, dependency, generated-output, excluded-evidence, and observed
+environment hashes. Missing uploaded overnight artifacts remain unknown rather
+than being reconstructed.
+
+Legacy `outputs/anomaly_autoencoder_real/` and
+`outputs/anomaly_autoencoder_recent/` are retained as research history but
+excluded from canonical evidence because compact preprocessing used
+future-derived medians. Fingerprinted V2 artifacts are the only supported
+autoencoder evidence; none is currently published.

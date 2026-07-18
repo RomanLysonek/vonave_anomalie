@@ -2,174 +2,184 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import sys
 
-import pandas as pd
+import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "webapp"))
+from webapp.anomaly_dashboard import (
+    SCHEMA_VERSION,
+    _v2_evidence,
+    _validate_preflight,
+    _validate_weight_ablation,
+    build_anomaly_dashboard,
+    build_product_payload,
+    publish_anomaly_artifacts,
+)
 
-from anomaly_dashboard import build_anomaly_dashboard, build_product_payload
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
-def _write_json(path: Path, payload: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload), encoding="utf-8")
+def test_canonical_dashboard_is_deterministic_and_honest(tmp_path: Path) -> None:
+    first = build_anomaly_dashboard(ROOT)
+    second = build_anomaly_dashboard(ROOT)
 
-
-def test_anomaly_dashboard_aggregates_audit_and_search_status(tmp_path: Path) -> None:
-    audit = tmp_path / "outputs" / "anomaly_audit_real"
-    audit.mkdir(parents=True)
-    _write_json(audit / "anomaly_metadata.json", {
-        "n_local_anomalies": 1,
-        "n_systemic_days": 1,
-        "n_scored": 2,
-        "local_evt": {"threshold": 3.0},
-        "test_context": {"n_rows": 1, "n_shift_flags": 0},
-    })
-    pd.DataFrame([
-        {
-            "ProductId": 1, "DateKey": "2026-01-01", "Quantity": 10,
-            "expected_quantity": 9, "anomaly_signed_residual": 0.1,
-            "anomaly_score": 1.0, "anomaly_flag": False,
-            "anomaly_rate_28": 0.0, "days_since_anomaly": None,
-            "known_event": False, "systemic_anomaly_score": 1.0,
-            "systemic_anomaly_flag": False, "systemic_anomaly_rate_28": 0.0,
-            "anomaly_weight": 1.0,
+    assert first == second
+    assert first["schema_version"] == SCHEMA_VERSION
+    assert first["recommendation"] == {
+        "policy": "control",
+        "anomaly_mode": "off",
+        "status": "current",
+        "verified_evidence": {
+            "artifact": "outputs/real_data_test_summary.json",
+            "weight_ablation_winner": "control",
         },
-        {
-            "ProductId": 1, "DateKey": "2026-01-02", "Quantity": 40,
-            "expected_quantity": 10, "anomaly_signed_residual": 1.3,
-            "anomaly_score": 5.0, "anomaly_flag": True,
-            "anomaly_rate_28": 0.5, "days_since_anomaly": 0,
-            "known_event": True, "systemic_anomaly_score": 4.0,
-            "systemic_anomaly_flag": True, "systemic_anomaly_rate_28": 0.5,
-            "anomaly_weight": 0.9,
-        },
-    ]).to_csv(audit / "demand_anomaly_profile.csv", index=False)
-    pd.DataFrame([{
-        "ProductId": 1, "DateKey": "2026-01-12", "context_risk_raw": 0.2,
-        "context_risk_percentile": 0.8, "context_shift_flag": False,
-    }]).to_csv(audit / "test_context_risk.csv", index=False)
-    pd.DataFrame([{
-        "DateKey": "2026-01-12", "mean_context_risk": 0.5,
-        "max_context_risk": 0.8, "shifted_products": 0,
-    }]).to_csv(audit / "test_context_risk_daily.csv", index=False)
-
-    weekend = tmp_path / "outputs" / "weekend_v2_search"
-    _write_json(weekend / "manifest.json", {"candidate_count": 4})
-    _write_json(weekend / "refine_candidates.json", [{}, {}])
-    _write_json(weekend / "screen" / "one" / "result.json", {"status": "complete"})
-
-    payload = build_anomaly_dashboard(tmp_path)
-
-    assert payload["audit"]["available"] is True
-    assert payload["audit"]["event_protected_anomalies"] == 1
-    assert payload["audit"]["product_summary"][0]["local_anomalies"] == 1
-    assert payload["audit"]["daily"][1]["systemic_flag"] is True
-    assert payload["weekend_v2"]["state"] == "running"
-    assert payload["weekend_v2"]["stages"]["screen"] == {
-        "completed": 1, "failed": 0, "expected": 4,
+        "reason": (
+            "The verified weighting ablation selected control, and no "
+            "provenance-complete checked-in evidence justifies anomaly promotion."
+        ),
     }
+    assert first["generated_at"] is None
+    assert first["snapshot_as_of"] == "2026-01-18"
+    assert first["research_status"]["truth_labels_available"] is False
+    assert first["autoencoder_v2"]["available"] is False
+    assert first["weekend_v2"]["state"] == "not_run"
+    assert first["weekend_v2_preflight"]["state"] == "contaminated"
+    assert first["weekend_v2_preflight"]["provenance"] == "unverified"
+    assert first["weekend_v2_preflight"]["selection_use"] == "excluded"
+    assert first["weekend_v2_preflight"]["development_relative_improvement"] is None
+    assert first["overnight"]["scientific_status"] == "contaminated"
+    assert first["overnight"]["recommendation_status"] == "archived"
+    assert first["overnight"]["execution_enabled"] is False
+    assert len(first["excluded_evidence"]) == 2
+    assert all(item["sha256"] for item in first["excluded_evidence"])
+    assert first["audit"]["products"] == list(range(1, 31))
+
+    publish_anomaly_artifacts(ROOT, tmp_path)
+    aggregate = json.loads((tmp_path / "anomaly-dashboard-v2.json").read_text())
+    assert aggregate == first
+    checked_in = json.loads(
+        (ROOT / "docs" / "data" / "anomaly-dashboard-v2.json").read_text()
+    )
+    assert checked_in == first
+    products = sorted((tmp_path / "anomaly-products-v2").glob("product-*.json"))
+    assert len(products) == 30
 
 
-def test_product_payload_returns_timeline_and_context(tmp_path: Path) -> None:
-    audit = tmp_path / "outputs" / "anomaly_audit_real"
-    audit.mkdir(parents=True)
-    rows = [{
-        "ProductId": 7, "DateKey": "2026-01-01", "Quantity": 20,
-        "expected_quantity": 10, "anomaly_signed_residual": 0.65,
-        "anomaly_score": 4.5, "anomaly_flag": True,
-        "anomaly_rate_28": 0.1, "days_since_anomaly": 0,
-        "known_event": False, "systemic_anomaly_score": 2.0,
-        "systemic_anomaly_flag": False, "systemic_anomaly_rate_28": 0.0,
-        "anomaly_weight": 0.8,
-    }]
-    pd.DataFrame(rows).to_csv(audit / "demand_anomaly_profile.csv", index=False)
-    pd.DataFrame([{
-        "ProductId": 7, "DateKey": "2026-01-12", "context_risk_raw": 0.3,
-        "context_risk_percentile": 0.9, "context_shift_flag": False,
-    }]).to_csv(audit / "test_context_risk.csv", index=False)
+def test_publish_removes_stale_product_artifacts(tmp_path: Path) -> None:
+    stale = tmp_path / "anomaly-products-v2"
+    stale.mkdir(parents=True)
+    (stale / "product-31.json").write_text("{}")
 
-    payload = build_product_payload(tmp_path, 7)
+    publish_anomaly_artifacts(ROOT, tmp_path)
 
+    product_ids = sorted(
+        int(path.stem.removeprefix("product-"))
+        for path in (tmp_path / "anomaly-products-v2").glob("product-*.json")
+    )
+    assert product_ids == list(range(1, 31))
+
+
+def test_reproducible_build_time_does_not_change_snapshot_date(monkeypatch) -> None:
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "0")
+
+    payload = build_anomaly_dashboard(ROOT)
+
+    assert payload["generated_at"] == "1970-01-01T00:00:00Z"
+    assert payload["snapshot_as_of"] == "2026-01-18"
+
+
+def test_product_payload_is_versioned_and_has_full_timeline() -> None:
+    payload = build_product_payload(ROOT, 1)
+    assert payload["schema_version"] == "anomaly-product-v2"
     assert payload["available"] is True
-    assert payload["summary"]["local_anomalies"] == 1
-    assert payload["timeline"][0]["DateKey"] == "2026-01-01"
-    assert payload["future_context"][0]["context_risk_percentile"] == 0.9
+    assert payload["product_id"] == 1
+    assert payload["timeline"]
+    assert payload["timeline"][0]["DateKey"] == "2021-01-01"
+    assert payload["future_context"]
+    assert "threshold_exceedances" in payload["summary"]
 
 
-def test_product_payload_reports_missing_product(tmp_path: Path) -> None:
-    audit = tmp_path / "outputs" / "anomaly_audit_real"
-    audit.mkdir(parents=True)
-    pd.DataFrame([{
-        "ProductId": 1, "DateKey": "2026-01-01", "Quantity": 1,
-        "expected_quantity": 1, "anomaly_signed_residual": 0,
-        "anomaly_score": 0, "anomaly_flag": False,
-        "anomaly_rate_28": 0, "days_since_anomaly": None,
-        "known_event": False, "systemic_anomaly_score": 0,
-        "systemic_anomaly_flag": False, "systemic_anomaly_rate_28": 0,
-        "anomaly_weight": 1,
-    }]).to_csv(audit / "demand_anomaly_profile.csv", index=False)
-
-    payload = build_product_payload(tmp_path, 99)
-
+def test_product_payload_reports_missing_product() -> None:
+    payload = build_product_payload(ROOT, 99)
     assert payload["available"] is False
     assert "does not exist" in payload["message"]
 
 
-def test_anomaly_lab_has_research_description_strip() -> None:
-    static_dir = Path(__file__).resolve().parents[1] / "webapp" / "static"
-    html = (static_dir / "anomalies.html").read_text(encoding="utf-8")
-
-    assert 'class="model-hero page-description-strip" style="--mc:#f59e0b"' in html
-    assert "Baseline models remain in the Overview comparison" in html
-    assert "Control NeuralNet" in (static_dir / "common.js").read_text(encoding="utf-8")
-
-
-
-def test_retained_pages_share_identical_utility_and_site_header_markup() -> None:
-    static_dir = Path(__file__).resolve().parents[1] / "webapp" / "static"
-    pages = ["index.html", "anomalies.html", "dataset.html", "evaluation.html", "model.html"]
-
-    def fragment(html: str, start: str, end: str) -> str:
-        return html[html.index(start):html.index(end, html.index(start)) + len(end)]
-
-    utility_fragments = []
-    header_fragments = []
-    for page in pages:
-        html = (static_dir / page).read_text(encoding="utf-8")
-        utility_fragments.append(fragment(html, '<div class="promo-bar">', "</div>"))
-        header_fragments.append(fragment(html, '<header class="hero">', "</header>"))
-        assert "styles.css?v=22" in html
-
-    assert len(set(utility_fragments)) == 1
-    assert len(set(header_fragments)) == 1
+def test_static_anomaly_client_uses_generated_relative_data_without_polling() -> None:
+    script = (ROOT / "webapp" / "static" / "anomalies.js").read_text()
+    assert "data/anomaly-dashboard-v2.json" in script
+    assert "data/anomaly-products-v2/product-" in script
+    assert "/api/anomaly-lab" not in script
+    assert "setInterval" not in script
+    assert 'toLocaleString("en-GB"' in script
 
 
-def test_anomaly_description_strip_uses_shared_model_hero_geometry() -> None:
-    static_dir = Path(__file__).resolve().parents[1] / "webapp" / "static"
-    html = (static_dir / "anomalies.html").read_text(encoding="utf-8")
-    styles = (static_dir / "styles.css").read_text(encoding="utf-8")
-    script = (static_dir / "anomalies.js").read_text(encoding="utf-8")
+def test_optional_api_returns_exact_generated_files(tmp_path: Path, monkeypatch) -> None:
+    from webapp import server
 
-    assert '<header class="model-hero page-description-strip" style="--mc:#f59e0b">' in html
-    assert "anomaly-hero-strip" not in html
-    assert ".anomaly-hero-strip" not in styles
-    assert ".anomaly-site-hero" not in styles
-    assert "updateStrategyCopy(forecast, canonicalStrategy(forecast));" in script
-    assert "promo-anomaly-status" not in html
-    assert "promo-anomaly-status" not in script
+    aggregate = {"schema_version": SCHEMA_VERSION, "exact": [1, 2, 3]}
+    aggregate_path = tmp_path / "anomaly-dashboard-v2.json"
+    aggregate_path.write_text(json.dumps(aggregate))
+    products = tmp_path / "products"
+    products.mkdir()
+    product = {"schema_version": "anomaly-product-v2", "product_id": 7}
+    (products / "product-7.json").write_text(json.dumps(product))
+    monkeypatch.setattr(server, "ANOMALY_DASHBOARD_PATH", aggregate_path)
+    monkeypatch.setattr(server, "ANOMALY_PRODUCTS_DIR", products)
+
+    assert json.loads(server.get_anomaly_lab().body) == aggregate
+    assert json.loads(server.get_anomaly_product(7).body) == product
 
 
-def test_retained_detail_pages_share_explicit_strip_width_contract() -> None:
-    static_dir = Path(__file__).resolve().parents[1] / "webapp" / "static"
-    pages = ["anomalies.html", "dataset.html", "evaluation.html", "model.html"]
-    for page in pages:
-        html = (static_dir / page).read_text(encoding="utf-8")
-        assert "model-hero page-description-strip" in html
+def test_weight_ablation_rejects_empty_and_contradictory_evidence() -> None:
+    assert _validate_weight_ablation({"forecast_weight_ablation": {"summary": []}})[0] is None
+    payload = json.loads((ROOT / "outputs" / "real_data_test_summary.json").read_text())
+    benchmark_rows = [
+        row for row in payload["forecast_weight_ablation"]["summary"]
+        if row["split"] == "benchmark"
+    ]
+    benchmark_rows[0]["WAPE"] = 999.0
+    benchmark_rows[1]["WAPE"] = 0.0
+    assert _validate_weight_ablation(payload)[0]["winner"] == "control"
+    payload["forecast_weight_ablation"]["winner"] = "weight_soft"
+    evidence, reason = _validate_weight_ablation(payload)
+    assert evidence is None
+    assert "contradicts" in reason
 
-    styles = (static_dir / "styles.css").read_text(encoding="utf-8")
-    assert "--dashboard-shell-width: 1280px;" in styles
-    assert ".page-description-strip {" in styles
-    assert "max-width: var(--dashboard-shell-width);" in styles
-    assert "scrollbar-gutter: stable;" in styles
+
+def test_preflight_derives_improvement_and_crosses_zero_from_metrics() -> None:
+    payload = json.loads((ROOT / "reports" / "weekend_v2_preflight.json").read_text())
+    evidence, reason = _validate_preflight(payload)
+    assert reason == "valid"
+    assert evidence is not None
+    assert evidence["development_relative_improvement"] == pytest.approx(
+        (payload["control"]["development_WAPE"]
+         - payload["global_convex_crossfit"]["development_WAPE"])
+        / payload["control"]["development_WAPE"]
+    )
+    assert evidence["confidence_interval_crosses_zero"] is True
+
+    payload["global_convex_crossfit"]["development_relative_improvement"] = 0.99
+    assert _validate_preflight(payload)[0] is None
+
+
+def test_v2_fake_hashes_and_empty_outputs_are_invalid(tmp_path: Path) -> None:
+    artifact = tmp_path / "outputs" / "anomaly_autoencoder_v2"
+    artifact.mkdir(parents=True)
+    (artifact / "artifact_manifest.json").write_text(json.dumps({
+        "schema_version": "systemic-autoencoder-v2",
+        "canonical_inputs": {"input.csv": {"sha256": "truthy", "size": 1}},
+        "configuration": {"window": 28},
+        "canonical_outputs": [],
+        "outputs": {},
+        "fingerprint": {
+            "provenance_schema_version": "artifact-provenance-v3",
+            "source_hash": "truthy",
+            "dependency_manifest_hash": "truthy",
+        },
+        "body": {"available": True},
+    }))
+
+    result = _v2_evidence(tmp_path)
+    assert result["available"] is False
+    assert result["state"] == "invalid"

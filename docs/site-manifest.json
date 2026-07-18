@@ -1,0 +1,243 @@
+{
+  "files": [
+    {
+      "path": ".nojekyll",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "anomalies.html",
+      "sha256": "1c16800a5c6fc5f4d286f07de86bba9512529abbadd376d817a2230839083c36",
+      "size": 6571
+    },
+    {
+      "path": "anomalies.js",
+      "sha256": "0bc0e19421f433ea82e1a9574688e8910182e8b5d4f9bb0132670ca41fc63900",
+      "size": 16750
+    },
+    {
+      "path": "app.js",
+      "sha256": "fb056233eb3071e08ccbe046e5897451b2542cd557fbf7acc54ead98a8981e82",
+      "size": 34493
+    },
+    {
+      "path": "common.js",
+      "sha256": "f749d36864e402977213dfba637b7c1a92b25a6a008e742f0f9cbca00788dd86",
+      "size": 8198
+    },
+    {
+      "path": "data/anomaly-dashboard-v2.json",
+      "sha256": "42eddac0875eb37eb317a4de6c2d12f8d671e30c3ba462cdebd24c8568c5ba75",
+      "size": 545241
+    },
+    {
+      "path": "data/anomaly-products-v2/product-1.json",
+      "sha256": "be5cb7d52d4c61b401dc944d4b514e1eb424e05f51b4fc8da91d570eabca9819",
+      "size": 889788
+    },
+    {
+      "path": "data/anomaly-products-v2/product-10.json",
+      "sha256": "a7f261f8da3486373b0217c6a0ea2fa8ce5389664b787d1767f2b33397426814",
+      "size": 878673
+    },
+    {
+      "path": "data/anomaly-products-v2/product-11.json",
+      "sha256": "d5c77a450f83b8e9223067fbd834678776937199443c5de1d7be91b9625ad787",
+      "size": 881326
+    },
+    {
+      "path": "data/anomaly-products-v2/product-12.json",
+      "sha256": "cdfe8711b383f057e2cf29be46e27e73b16a56e135b96baa15c93166c4434c71",
+      "size": 884096
+    },
+    {
+      "path": "data/anomaly-products-v2/product-13.json",
+      "sha256": "3704c32c8f99883cf064aed26b76658bcf8483553f52f5d0e5382a1a8b70079a",
+      "size": 885278
+    },
+    {
+      "path": "data/anomaly-products-v2/product-14.json",
+      "sha256": "c389c9c3499c095ef9453b5dccff68dd4095341589653c27762711bed870abfe",
+      "size": 880893
+    },
+    {
+      "path": "data/anomaly-products-v2/product-15.json",
+      "sha256": "cb58fa2b38601b0ae6f3a4bd41445f705edd260277525515e16fbf425fc57b5b",
+      "size": 881100
+    },
+    {
+      "path": "data/anomaly-products-v2/product-16.json",
+      "sha256": "06e2cd8508dd0e9f69531fb9362c1cf32f46fefabb701689e75680d1709ac4e8",
+      "size": 890071
+    },
+    {
+      "path": "data/anomaly-products-v2/product-17.json",
+      "sha256": "25f6c3d13b9cba0000ed90ef04cd7bae660b01ed4370d5c3c792706d86480eae",
+      "size": 887346
+    },
+    {
+      "path": "data/anomaly-products-v2/product-18.json",
+      "sha256": "5c6bd26eb19945ef3ce67a8bdcdddca4332ec6cb23efbe14b163d506c3460b69",
+      "size": 881795
+    },
+    {
+      "path": "data/anomaly-products-v2/product-19.json",
+      "sha256": "032a75ef48395a4759b72c29b9025cf904225ec6e561964a89a511636a5e56ee",
+      "size": 884718
+    },
+    {
+      "path": "data/anomaly-products-v2/product-2.json",
+      "sha256": "d60d042b999e4db838491e9480db48cbd91ffa5ba3025127d98a5348a130f43d",
+      "size": 881275
+    },
+    {
+      "path": "data/anomaly-products-v2/product-20.json",
+      "sha256": "508d865a5a396bb35a894b5746b3883ff39fe8a818ba8ed7fdff4c7f9b9dc897",
+      "size": 881946
+    },
+    {
+      "path": "data/anomaly-products-v2/product-21.json",
+      "sha256": "8d31fafbf347de99bda440e0aa948a3ad254ccddaf65bdf1b61a2e091b8ab180",
+      "size": 879438
+    },
+    {
+      "path": "data/anomaly-products-v2/product-22.json",
+      "sha256": "fa242bffce9d10e2ba8dfe488a2686bf1a9558f319e1fa4f54e3612e381274fd",
+      "size": 883048
+    },
+    {
+      "path": "data/anomaly-products-v2/product-23.json",
+      "sha256": "7b3d92732bbbd08f66ada117872dc6777066b70ab4882ccedf2320572cb5fbca",
+      "size": 883541
+    },
+    {
+      "path": "data/anomaly-products-v2/product-24.json",
+      "sha256": "95075c08f3ccb95049dc94352a5fa27bbf63af405a975144cfb7f210f45e934d",
+      "size": 656999
+    },
+    {
+      "path": "data/anomaly-products-v2/product-25.json",
+      "sha256": "b0e87106b4660e05cd27acb8bec718aad7567d78001d6642521b599a3d716bff",
+      "size": 866223
+    },
+    {
+      "path": "data/anomaly-products-v2/product-26.json",
+      "sha256": "8511b33b2cfb9caa003358e825e079159df4a1a030af5c75bbf1a25649061fb4",
+      "size": 738804
+    },
+    {
+      "path": "data/anomaly-products-v2/product-27.json",
+      "sha256": "e3d416df57e7a50d609a41aa2e9927f3ef7f1676cc30812caac3f36d7f6efb35",
+      "size": 598846
+    },
+    {
+      "path": "data/anomaly-products-v2/product-28.json",
+      "sha256": "b4a41e4544b4bf20554140c19f9f5cd8e502b0160ab2e0b925a6e063da3c41e0",
+      "size": 572523
+    },
+    {
+      "path": "data/anomaly-products-v2/product-29.json",
+      "sha256": "4b4b78fce4caf8ad972618e93e1d3da2a008298c124ebda6a70046b76e8b602f",
+      "size": 526379
+    },
+    {
+      "path": "data/anomaly-products-v2/product-3.json",
+      "sha256": "8ba5181974167973bf5ec405861cfe0e4aab3ed63151ac77150282e9c355ab39",
+      "size": 888095
+    },
+    {
+      "path": "data/anomaly-products-v2/product-30.json",
+      "sha256": "490f038c88c7c6de8adf347903532210898ac9616cabd08bdb32053e827f7da2",
+      "size": 526816
+    },
+    {
+      "path": "data/anomaly-products-v2/product-4.json",
+      "sha256": "5ab1641f1615c5f9db34ff8426912038862513080bb88b81db8577c072bfc35d",
+      "size": 882813
+    },
+    {
+      "path": "data/anomaly-products-v2/product-5.json",
+      "sha256": "8ac6d29a0cf7f90f33747c012188779cab04e82b4b345f33ce2c62492ec7d7a8",
+      "size": 888832
+    },
+    {
+      "path": "data/anomaly-products-v2/product-6.json",
+      "sha256": "cd7b190f918606f986955fae4c397e7fa18a2a33997a37be4469d0a38960f445",
+      "size": 882561
+    },
+    {
+      "path": "data/anomaly-products-v2/product-7.json",
+      "sha256": "6273a45f73605f57de8d759ee1b07525a400f7016857df074a43bae35bfd0e89",
+      "size": 879671
+    },
+    {
+      "path": "data/anomaly-products-v2/product-8.json",
+      "sha256": "30c7168987794ef9f688e4a5dec96df2d358c7531f0022ddd47d29329ee1eab0",
+      "size": 886505
+    },
+    {
+      "path": "data/anomaly-products-v2/product-9.json",
+      "sha256": "8e6654ecb3e28ece9d7700076b4c7df736c65e047533a4fa9fb39b142e753536",
+      "size": 876676
+    },
+    {
+      "path": "data/published_results_manifest.json",
+      "sha256": "e6cf09b33af89416507ef024ab64cd729907b49e6c1f91f5adf1a5c7ac401f79",
+      "size": 14477
+    },
+    {
+      "path": "data/results.json",
+      "sha256": "5dd4b2892173a64b52cb7e9f12841054dfb19bc154345a1bbabc3993f3cc1a18",
+      "size": 2043292
+    },
+    {
+      "path": "dataset.html",
+      "sha256": "5ee66987caa19264d5df793fa25122716acf3a69d4d9d49d198c7d00aec09897",
+      "size": 10482
+    },
+    {
+      "path": "dataset.js",
+      "sha256": "9d56a7b2302d0ef7183e169f5541a63a5a4d09b0297657bace38ae24b14eac6d",
+      "size": 9258
+    },
+    {
+      "path": "evaluation.html",
+      "sha256": "5d1a78dff357e1da2932bc7570339417ccf85278093130d0218c9b3407b562ed",
+      "size": 10809
+    },
+    {
+      "path": "evaluation.js",
+      "sha256": "53d12592e66b9c91623f2812bea712486213d052390ad8e0e773b9b15528ddfc",
+      "size": 8773
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "91ad1623124a06a028beb2b77b32645c4754fec7580697780d0c2e606d9b07ea",
+      "size": 271
+    },
+    {
+      "path": "index.html",
+      "sha256": "aab4a0510dd83071947e99de43b6c0b8c60dc8d2c1b7618300270932961fba8f",
+      "size": 12602
+    },
+    {
+      "path": "model.html",
+      "sha256": "d9090110ba800be139aad2f85138fcc057dab23c15f1403396f8f81c3d25ac13",
+      "size": 4962
+    },
+    {
+      "path": "model.js",
+      "sha256": "9b06367b812d8e4548c150be32482c6d338297302b1cc96d37aed5536256f573",
+      "size": 28720
+    },
+    {
+      "path": "styles.css",
+      "sha256": "89782513328004a98fa784f410bbfd91e1f7aa6ae2b755fbc8b0b0ec28ed91f1",
+      "size": 41513
+    }
+  ],
+  "generated_at": null,
+  "generated_at_basis": "unavailable",
+  "schema_version": "static-dashboard-site-v2",
+  "source_manifest_hash": "71a69b16bf097e8e4b816ebfd25c618afc3d5c4a879cc1e6d065d7d550c78311"
+}

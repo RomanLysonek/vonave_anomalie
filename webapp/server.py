@@ -1,13 +1,11 @@
 """Local presentation dashboard for the Notino forecast results.
 
-Serves the static frontend (webapp/static/) and a small JSON API that reads
-outputs/results.json fresh on every request -- rerun the ML pipeline
-(uv run python ml/pipeline.py) or the lightweight
-`uv run python ml/export_results.py`, then just refresh the browser.
+Serves the authored frontend and optional APIs backed by the exact JSON files
+published to GitHub Pages. The server never performs a separate aggregation.
 
-Run (from repo root): uv run python webapp/server.py
+Run (from repo root): uv run python -m webapp.server
 Then open:            http://127.0.0.1:9001
-Override port:        VONAVE_ANOMALIE_PORT=9011 uv run python webapp/server.py
+Override port:        VONAVE_ANOMALIE_PORT=9011 uv run python -m webapp.server
 """
 
 import json
@@ -18,32 +16,57 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from anomaly_dashboard import (
-    build_anomaly_dashboard,
-    build_anomaly_status,
-    build_product_payload,
-)
-
 ROOT_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-RESULTS_PATH = ROOT_DIR / "outputs" / "results.json"
+PUBLISHED_DATA_DIR = ROOT_DIR / "docs" / "data"
+RESULTS_PATH = PUBLISHED_DATA_DIR / "results.json"
+ANOMALY_DASHBOARD_PATH = PUBLISHED_DATA_DIR / "anomaly-dashboard-v2.json"
+ANOMALY_PRODUCTS_DIR = PUBLISHED_DATA_DIR / "anomaly-products-v2"
 
 app = FastAPI(title="Vonave Anomalie Dashboard")
 
 
+def _read_published_json(path: Path, guidance: str) -> JSONResponse:
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=guidance)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Published artifact is unreadable: {path.name}: {exc}",
+        ) from exc
+    return JSONResponse(payload)
+
+
 @app.get("/api/results")
 def get_results() -> JSONResponse:
-    if not RESULTS_PATH.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "outputs/results.json not found. Run "
-                "'uv run python ml/pipeline.py' (or ml/export_results.py) first."
-            ),
-        )
-    with open(RESULTS_PATH) as f:
-        data = json.load(f)
-    return JSONResponse(data)
+    return _read_published_json(
+        RESULTS_PATH,
+        "outputs/results.json not found. Restore the checked-in published snapshot.",
+    )
+
+
+@app.get("/data/results.json")
+def published_results_file() -> FileResponse:
+    if not RESULTS_PATH.is_file():
+        raise HTTPException(status_code=404, detail="Published forecast results are unavailable.")
+    return FileResponse(RESULTS_PATH, media_type="application/json")
+
+
+@app.get("/data/anomaly-dashboard-v2.json")
+def published_anomaly_file() -> FileResponse:
+    if not ANOMALY_DASHBOARD_PATH.is_file():
+        raise HTTPException(status_code=404, detail="Published anomaly snapshot is unavailable.")
+    return FileResponse(ANOMALY_DASHBOARD_PATH, media_type="application/json")
+
+
+@app.get("/data/anomaly-products-v2/product-{product_id}.json")
+def published_anomaly_product_file(product_id: int) -> FileResponse:
+    path = ANOMALY_PRODUCTS_DIR / f"product-{product_id}.json"
+    if product_id < 1 or product_id > 30 or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Product {product_id} is not published.")
+    return FileResponse(path, media_type="application/json")
 
 
 @app.get("/")
@@ -64,20 +87,20 @@ def anomalies_page() -> FileResponse:
 
 @app.get("/api/anomaly-lab")
 def get_anomaly_lab() -> JSONResponse:
-    return JSONResponse(build_anomaly_dashboard(ROOT_DIR))
-
-
-@app.get("/api/anomaly-lab/status")
-def get_anomaly_lab_status() -> JSONResponse:
-    return JSONResponse(build_anomaly_status(ROOT_DIR))
+    return _read_published_json(
+        ANOMALY_DASHBOARD_PATH,
+        "Canonical anomaly artifact not found. Run 'uv run python ml/publish_site.py'.",
+    )
 
 
 @app.get("/api/anomaly-lab/product/{product_id}")
 def get_anomaly_product(product_id: int) -> JSONResponse:
-    payload = build_product_payload(ROOT_DIR, product_id)
-    if not payload.get("available"):
-        raise HTTPException(status_code=404, detail=payload.get("message", "Product not found"))
-    return JSONResponse(payload)
+    if product_id < 1 or product_id > 30:
+        raise HTTPException(status_code=404, detail=f"Product {product_id} is not published.")
+    return _read_published_json(
+        ANOMALY_PRODUCTS_DIR / f"product-{product_id}.json",
+        f"Published anomaly artifact for product {product_id} not found.",
+    )
 
 
 @app.get("/dataset")
@@ -105,10 +128,4 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.environ.get("VONAVE_ANOMALIE_PORT", "9001"))
-    uvicorn.run(
-        "server:app",
-        host="127.0.0.1",
-        port=port,
-        reload=True,
-        reload_dirs=[str(Path(__file__).parent)],
-    )
+    uvicorn.run("webapp.server:app", host="127.0.0.1", port=port)

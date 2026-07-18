@@ -21,8 +21,8 @@
       "beta": 0.678502109975119,
       "n_total": 39676,
       "n_exceed": 4496,
-      "validation_far": 0.004940014114326041,
-      "validation_far_error": 0.005059985885673959,
+      "validation_exceedance_rate": 0.004940014114326041,
+      "validation_exceedance_error": 0.005059985885673959,
       "ks_stat": 0.013944340916766329
     },
     "systemic_evt": {
@@ -35,8 +35,8 @@
       "beta": 0.4422247829770392,
       "n_total": 1446,
       "n_exceed": 289,
-      "validation_far": 0.013850415512465374,
-      "validation_far_error": 0.006149584487534627,
+      "validation_exceedance_rate": 0.013850415512465374,
+      "validation_exceedance_error": 0.006149584487534627,
       "ks_stat": 0.0403041107696584
     },
     "n_rows": 51563,
@@ -206,8 +206,8 @@
       "beta": 0.10033075579897768,
       "n_total": 290,
       "n_exceed": 58,
-      "validation_far": 0.3333333333333333,
-      "validation_far_error": 0.3133333333333333,
+      "validation_exceedance_rate": 0.3333333333333333,
+      "validation_exceedance_error": 0.3133333333333333,
       "ks_stat": 0.12587846470339514
     },
     "n_flagged": 64
@@ -276,8 +276,8 @@
       "beta": 0.21513274192346427,
       "n_total": 145,
       "n_exceed": 29,
-      "validation_far": 0.0,
-      "validation_far_error": 0.02,
+      "validation_exceedance_rate": 0.0,
+      "validation_exceedance_error": 0.02,
       "ks_stat": 0.1120138283418983
     },
     "n_flagged": 1

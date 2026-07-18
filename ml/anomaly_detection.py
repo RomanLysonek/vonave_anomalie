@@ -48,8 +48,8 @@ class EVTCalibration:
     beta: float | None = None
     n_total: int = 0
     n_exceed: int = 0
-    validation_far: float | None = None
-    validation_far_error: float | None = None
+    validation_exceedance_rate: float | None = None
+    validation_exceedance_error: float | None = None
     ks_stat: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -183,7 +183,7 @@ def calibrate_evt_threshold(
 ) -> EVTCalibration:
     """Calibrate a DAVID-style POT/GPD threshold with temporal holdout checks.
 
-    Candidate tail cut-offs are evaluated by out-of-sample false-alarm error
+    Candidate tail cut-offs are evaluated by validation exceedance-rate error
     plus a small KS goodness-of-fit penalty.  The empirical quantile is a
     deterministic fallback when the tail is too small or numerically unstable.
     """
@@ -241,13 +241,17 @@ def calibrate_evt_threshold(
         # actionable for this small retail dataset.
         if threshold > max(float(np.max(fit_values)) * 5.0, u + 20.0):
             continue
-        far = float(np.mean(validation > threshold)) if validation.size else float("nan")
-        far_error = abs(far - alpha) if np.isfinite(far) else alpha
+        exceedance_rate = (
+            float(np.mean(validation > threshold)) if validation.size else float("nan")
+        )
+        exceedance_error = (
+            abs(exceedance_rate - alpha) if np.isfinite(exceedance_rate) else alpha
+        )
         try:
             ks_stat = float(kstest(exceedances, "genpareto", args=(xi, 0.0, beta)).statistic)
         except (ValueError, FloatingPointError):
             ks_stat = 1.0
-        objective = far_error + 0.10 * ks_stat
+        objective = exceedance_error + 0.10 * ks_stat
         calibration = EVTCalibration(
             threshold=threshold,
             method="evt_pot_gpd",
@@ -258,8 +262,8 @@ def calibrate_evt_threshold(
             beta=float(beta),
             n_total=int(fit_values.size),
             n_exceed=int(exceedances.size),
-            validation_far=far,
-            validation_far_error=far_error,
+            validation_exceedance_rate=exceedance_rate,
+            validation_exceedance_error=exceedance_error,
             ks_stat=ks_stat,
         )
         if best is None or objective < best[0]:

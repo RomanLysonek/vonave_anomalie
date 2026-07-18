@@ -349,6 +349,38 @@ def test_favicon_route_serves_static_icon():
     assert Path(response.path) == STATIC / "favicon.svg"
     assert response.media_type == "image/svg+xml"
 
+
+def test_all_authored_pages_share_suite_identity_and_absolute_links():
+    pages = ["index.html", "model.html", "evaluation.html", "dataset.html", "anomalies.html"]
+    links = [
+        ("Classical Forecasting", "https://romanlysonek.github.io/vonava_predikce/"),
+        ("Anomaly Research", "https://romanlysonek.github.io/vonave_anomalie/"),
+        ("Chronos-2 Challenger", "https://romanlysonek.github.io/vonavy_chronos/"),
+    ]
+    for name in pages:
+        html = (STATIC / name).read_text()
+        assert '<html lang="en-GB">' in html
+        assert "NOTINO / Interview Assignment" in html
+        for label, href in links:
+            assert label in html
+            assert f'href="{href}"' in html
+        assert (
+            '<a href="https://romanlysonek.github.io/vonave_anomalie/" '
+            'aria-current="page">Anomaly Research</a>'
+        ) in html
+
+
+def test_anomaly_page_has_version_banner_and_control_claims():
+    html = (STATIC / "anomalies.html").read_text()
+    script = (STATIC / "anomalies.js").read_text()
+    assert 'id="snapshot-banner"' in html
+    assert "No anomaly truth labels exist" in html
+    assert "anomaly_mode=off" in html
+    assert 'recommendation.policy || "unavailable"' in script
+    assert 'recommendation.anomaly_mode || "unavailable"' in script
+    assert "Historical preflight" in script
+    assert 'preflight.selection_use || "excluded"' in script
+
 def test_model_comparison_uses_wide_seven_column_desktop_layout():
     styles = (STATIC / "styles.css").read_text()
     assert "width: min(1480px, calc(100vw - 32px));" in styles

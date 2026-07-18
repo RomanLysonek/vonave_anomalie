@@ -1,5 +1,11 @@
 # DAVID → `vonave_anomalie`: transfer audit and implementation rationale
 
+No anomaly truth labels exist; known events are explanatory proxies, not labels.
+This is not a validated anomaly detector. Standalone policies did not beat the
+control, so `anomaly_mode=off` remains recommended. Compact-autoencoder evidence
+is excluded because preprocessing used future-derived medians; fingerprinted V2
+is canonical.
+
 ## Executive decision
 
 The sensible use of DAVID in this forecasting task is **not** to replace the forecaster with an anomaly-detection autoencoder. The useful transfer is a statistically calibrated, leakage-safe anomaly layer around the existing supervised pipeline:
@@ -20,7 +26,7 @@ This gives an interview-grade story because it demonstrates architectural reuse,
 
 Relevant source concepts:
 
-- `src/david/core/evaluation/evt.py`: GPD fitting, POT thresholds, false-alarm calibration, KS-based tail-fit checks.
+- `src/david/core/evaluation/evt.py`: GPD fitting, POT thresholds, validation exceedance calibration, KS-based tail-fit checks.
 - `src/david/metrics/models/autoencoder/`: multivariate metric-window autoencoding.
 - `src/david/logs/models/autoencoder/`: reconstruction-based anomaly scoring for sequential data.
 - DAVID inference modules: separation of learned score generation from threshold/action policy.
@@ -117,8 +123,8 @@ The implementation adapts DAVID's POT/GPD approach to the smaller retail score s
 1. preserve score order and use a temporal tail holdout;
 2. sweep candidate body/tail split quantiles;
 3. fit a GPD to exceedances with location fixed at zero;
-4. derive the threshold for target false-alarm probability `alpha`;
-5. evaluate validation false-alarm error plus a KS fit penalty;
+4. derive the threshold for target validation exceedance probability `alpha`;
+5. evaluate validation exceedance-rate error plus a KS fit penalty;
 6. reject unstable, non-finite, or implausibly extrapolated fits;
 7. use a deterministic empirical quantile when data are insufficient.
 

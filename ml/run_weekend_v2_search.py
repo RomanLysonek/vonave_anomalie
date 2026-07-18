@@ -26,6 +26,7 @@ from anomaly_search_common import (
     development_origins,
     load_json,
     selected_forecasting_config,
+    validate_target_roles,
     write_json,
 )
 from framework import Config, load_raw
@@ -41,16 +42,29 @@ from weekend_v2_common import (
     crossfit_specialist_gate,
     evaluate_prediction,
     fit_aggregate_reconciliation,
-    generate_weekend_v2_candidates,
-    load_stage_results,
+    candidate,
+    control_candidate,
+    generate_regime_specialists,
+    generate_statistical_neighborhood,
+    load_top_autoencoder_specialists,
     merge_oof,
-    rank_forecast_results,
     save_pickle,
     search_convex_weights,
     wape,
 )
+from artifact_provenance import (
+    artifact_fingerprint,
+    config_hash,
+    environment_metadata,
+    file_fingerprint,
+    file_hash,
+    forecast_trial_fingerprint,
+    load_validated_result,
+    WEEKEND_SEARCH_SOURCE_PATHS,
+)
 
-SCHEMA_VERSION = "weekend-v2-search-v1"
+SCHEMA_VERSION = "weekend-v2-search-v5"
+RECOMMENDATION_MANIFEST_SCHEMA_VERSION = "weekend-v2-recommendation-provenance-v3"
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,6 +80,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=20260716)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--retry-failed", action="store_true")
+    parser.add_argument(
+        "--confirm-recompute-stale",
+        action="store_true",
+        help="Deliberately replace stale, corrupt, or unverifiable expensive artifacts",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--max-hours", type=float, default=0.0)
@@ -123,9 +142,210 @@ def exhausted(started: float, max_hours: float) -> bool:
     return max_hours > 0 and time.monotonic() - started >= max_hours * 3600
 
 
+def rank_development_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rank candidates using development evidence; benchmark is reporting-only."""
+    control = next(x for x in results if x["candidate"]["family"] == "control")
+    control_dev = float(control["development"]["global"]["WAPE"])
+    control_top = float(control["development"]["top_actual_decile"]["WAPE"])
+    rows: list[dict[str, Any]] = []
+    for payload in results:
+        dev = float(payload["development"]["global"]["WAPE"])
+        dev_improvement = (control_dev - dev) / control_dev
+        top = float(payload["development"]["top_actual_decile"]["WAPE"])
+        top_improvement = (control_top - top) / control_top
+        control_origins = control["development"].get("by_origin", {})
+        candidate_origins = payload["development"].get("by_origin", {})
+        origin_improvements = [
+            (float(control_origins[key]["WAPE"]) - float(candidate_origins[key]["WAPE"]))
+            / float(control_origins[key]["WAPE"])
+            for key in sorted(set(control_origins) & set(candidate_origins))
+            if float(control_origins[key]["WAPE"]) > 0
+        ]
+        stability = float(np.std(origin_improvements)) if origin_improvements else 1.0
+        positive_share = (
+            float(np.mean(np.asarray(origin_improvements) > 0))
+            if origin_improvements else 0.0
+        )
+        selection_score = (
+            dev_improvement
+            + 0.10 * top_improvement
+            + 0.05 * positive_share
+            - 0.12 * stability
+        )
+        rows.append({
+            "candidate_id": payload["candidate"]["id"],
+            "name": payload["candidate"]["name"],
+            "family": payload["candidate"]["family"],
+            "development_WAPE": dev,
+            "development_relative_improvement": dev_improvement,
+            "top_decile_relative_improvement": top_improvement,
+            "origin_improvement_std": stability,
+            "origin_positive_share": positive_share,
+            "development_selection_score": selection_score,
+        })
+    return sorted(
+        rows,
+        key=lambda row: (-row["development_selection_score"], row["candidate_id"]),
+    )
+
+
+def add_frozen_benchmark_reporting(
+    rows: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    by_id = {payload["candidate"]["id"]: payload for payload in results}
+    control = next(x for x in results if x["candidate"]["family"] == "control")
+    control_wape = float(control["benchmark"]["global"]["WAPE"])
+    for row in rows:
+        benchmark_wape = float(
+            by_id[row["candidate_id"]]["benchmark"]["global"]["WAPE"]
+        )
+        row["benchmark_WAPE"] = benchmark_wape
+        row["benchmark_relative_improvement"] = (
+            control_wape - benchmark_wape
+        ) / control_wape
+    return rows
+
+
+def generate_development_only_candidates(
+    profile: WeekendV2Profile, *, seed: int, prior_root: Path
+) -> list[dict[str, Any]]:
+    """Build the pool without using prior benchmark metrics."""
+    no_prior = prior_root / ".no_legacy_selection_input"
+    statistical = generate_statistical_neighborhood(
+        profile.statistical_candidates, seed=seed, prior_root=no_prior
+    )
+    regimes = generate_regime_specialists(profile.regime_candidates)
+    autoencoders = load_top_autoencoder_specialists(prior_root, profile.autoencoder_top)
+    hybrids: list[dict[str, Any]] = []
+    for stat in statistical[:2]:
+        for autoencoder in autoencoders[:2]:
+            cfg = {**stat["config"], **autoencoder["config"]}
+            cfg.update({"anomaly_mode": "both", "anomaly_source": "hybrid"})
+            hybrids.append(candidate(
+                "hybrid",
+                f"v2_hybrid_{stat['id']}_{autoencoder['id']}",
+                cfg,
+                parents=[stat["id"], autoencoder["id"]],
+                diagnostic=autoencoder.get("diagnostic"),
+            ))
+    by_id = {
+        item["id"]: item
+        for item in [control_candidate(), *statistical, *regimes, *autoencoders, *hybrids]
+    }
+    return list(by_id.values())
+
+
+def select_development_winner(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    accepted = [row for row in rows if row["accepted"]]
+    if not accepted:
+        return None
+    return sorted(
+        accepted,
+        key=lambda row: (-row["selection_score"], row["name"]),
+    )[0]
+
+
+def _stage_fingerprints(
+    train: pd.DataFrame,
+    candidates: list[dict[str, Any]],
+    *,
+    dev_origins: pd.DatetimeIndex,
+    bench_origins: pd.DatetimeIndex,
+    epochs: int,
+    seeds: tuple[int, ...],
+    device: str,
+) -> dict[str, dict[str, Any]]:
+    return {
+        item["id"]: forecast_trial_fingerprint(
+            candidate=item,
+            train_data=train,
+            model="NeuralNet",
+            epochs=epochs,
+            seeds=seeds,
+            device=device,
+            development_origins=dev_origins,
+            benchmark_origins=bench_origins,
+        )
+        for item in candidates
+    }
+
+
+def _profile_target_roles(
+    train: pd.DataFrame, profile: WeekendV2Profile
+) -> dict[str, Any]:
+    """Validate all stage target roles before search execution is possible."""
+    cfg = selected_forecasting_config()
+    stages: dict[str, Any] = {}
+    for name, development_count, benchmark_count in (
+        (
+            "screen",
+            profile.screen_development_origins,
+            profile.screen_benchmark_origins,
+        ),
+        (
+            "refine",
+            profile.refine_development_origins,
+            profile.refine_benchmark_origins,
+        ),
+        (
+            "confirmation",
+            profile.confirmation_development_origins,
+            profile.confirmation_benchmark_origins,
+        ),
+    ):
+        stages[name] = validate_target_roles(
+            development_origins=development_origins(development_count),
+            benchmark_origins=benchmark_origins(train, benchmark_count, cfg),
+            horizon=cfg.horizon,
+        )
+    return {
+        "schema_version": "search-target-role-validation-v1",
+        "profile": profile.name,
+        "stages": stages,
+        "content_sha256": artifact_fingerprint(
+            schema_version="search-target-role-validation-v1",
+            semantic=stages,
+        )["semantic_hash"],
+    }
+
+
+def _load_valid_stage_results(
+    stage_dir: Path,
+    expected_by_id: dict[str, dict[str, Any]],
+    *,
+    confirm_recompute_stale: bool = False,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    if not stage_dir.exists():
+        return results
+    for result_path in sorted(stage_dir.glob("*/result.json")):
+        expected = expected_by_id.get(result_path.parent.name)
+        if expected is None:
+            print(f"[resume] ignoring unrecognized result {result_path}")
+            continue
+        payload, reason = load_validated_result(
+            result_path,
+            expected,
+            required_outputs=("development_oof.parquet", "benchmark_oof.parquet"),
+        )
+        if payload is None:
+            if not confirm_recompute_stale:
+                raise RuntimeError(
+                    f"Stale or unverifiable result {result_path}: {reason}. "
+                    "Pass --confirm-recompute-stale before continuing broad work."
+                )
+            print(f"[resume] confirmed ignore of invalid {result_path}: {reason}")
+            continue
+        payload["_result_path"] = str(result_path)
+        results.append(payload)
+    return results
+
+
 def run_stage(
     root: Path,
     name: str,
+    train: pd.DataFrame,
     candidates: list[dict[str, Any]],
     *,
     dev_origins: pd.DatetimeIndex,
@@ -139,14 +359,53 @@ def run_stage(
     dev_arg = ",".join(str(value.date()) for value in dev_origins)
     bench_arg = ",".join(str(value.date()) for value in bench_origins)
     seed_arg = ",".join(str(value) for value in seeds)
+    expected_by_id = _stage_fingerprints(
+        train,
+        candidates,
+        dev_origins=dev_origins,
+        bench_origins=bench_origins,
+        epochs=epochs,
+        seeds=seeds,
+        device=args.device,
+    )
     for index, item in enumerate(candidates, 1):
         if exhausted(started, args.max_hours):
             break
         trial = stage_dir / item["id"]
-        if (trial / "result.json").exists():
-            continue
-        if (trial / "failure.json").exists() and not args.retry_failed:
-            continue
+        result_path = trial / "result.json"
+        invalid_result = False
+        if result_path.exists():
+            payload, reason = load_validated_result(
+                result_path,
+                expected_by_id[item["id"]],
+                required_outputs=("development_oof.parquet", "benchmark_oof.parquet"),
+            )
+            if payload is not None:
+                continue
+            if not args.confirm_recompute_stale:
+                raise RuntimeError(
+                    f"Stale or unverifiable result {result_path}: {reason}. "
+                    "Pass --confirm-recompute-stale to deliberately rerun it."
+                )
+            print(f"[resume] confirmed recompute of invalid {result_path}: {reason}")
+            invalid_result = True
+        failure_path = trial / "failure.json"
+        if failure_path.exists():
+            failure = load_json(failure_path)
+            if (
+                failure.get("fingerprint") == expected_by_id[item["id"]]
+                and not args.retry_failed
+            ):
+                continue
+            if (
+                failure.get("fingerprint") != expected_by_id[item["id"]]
+                and not args.confirm_recompute_stale
+            ):
+                raise RuntimeError(
+                    f"Stale failure record {failure_path}. Pass "
+                    "--confirm-recompute-stale to deliberately rerun it."
+                )
+            print(f"[resume] confirmed retry after failure {failure_path}")
         command = [
             sys.executable,
             "ml/run_anomaly_forecast_trial.py",
@@ -162,13 +421,23 @@ def run_stage(
         ]
         if args.resume:
             command.append("--resume")
+        if args.confirm_recompute_stale:
+            command.append("--confirm-recompute-stale")
         print(f"\n[{name} {index}/{len(candidates)}] {item['name']} ({item['id']})")
         code = run_command(command, trial / "trial.log", args.dry_run)
         if code != 0 and args.fail_fast:
             raise RuntimeError(f"{name} trial {item['id']} failed with exit {code}")
-    results = load_stage_results(stage_dir)
+    results = _load_valid_stage_results(
+        stage_dir,
+        expected_by_id,
+        confirm_recompute_stale=args.confirm_recompute_stale,
+    )
     if results:
-        write_csv(root / f"{name}_leaderboard.csv", rank_forecast_results(results))
+        ranked = rank_development_results(results)
+        write_csv(
+            root / f"{name}_leaderboard.csv",
+            add_frozen_benchmark_reporting(ranked, results),
+        )
     return results
 
 
@@ -178,7 +447,7 @@ def select_candidates(
     top: int,
 ) -> list[dict[str, Any]]:
     mapping = {item["id"]: item for item in candidates}
-    rows = rank_forecast_results(results)
+    rows = rank_development_results(results)
     selected: list[dict[str, Any]] = []
     control = next(item for item in candidates if item["family"] == "control")
     selected.append(control)
@@ -218,9 +487,6 @@ def select_diverse_candidates(
     """
     mapping = {item["id"]: item for item in candidates}
     development, all_members = merge_oof(results, "development")
-    benchmark, benchmark_members = merge_oof(results, "benchmark")
-    if all_members != benchmark_members:
-        raise RuntimeError("Refine development/benchmark schemas differ")
     control_result = next(x for x in results if x["candidate"]["family"] == "control")
     control_member = f"member__{control_result['candidate']['id']}"
     selected = [control_member]
@@ -242,10 +508,6 @@ def select_diverse_candidates(
             dev_metrics = evaluate_prediction(
                 development, crossfit, control_member
             )
-            benchmark_prediction = apply_weight_plan(benchmark, plan, subset)
-            bench_metrics = evaluate_prediction(
-                benchmark, benchmark_prediction, control_member
-            )
             selected_mean = development[selected].mean(axis=1).to_numpy(dtype=float)
             candidate_prediction = development[option].to_numpy(dtype=float)
             actual = development["actual"].to_numpy(dtype=float)
@@ -257,8 +519,6 @@ def select_diverse_candidates(
             diversity = 1.0 - abs(correlation)
             score = (
                 dev_metrics["relative_improvement"]
-                + 0.20 * min(bench_metrics["relative_improvement"], 0.05)
-                - 1.5 * max(-0.02 - bench_metrics["relative_improvement"], 0.0)
                 - 0.12 * max(dev_metrics["top_decile_relative_change"], 0.0)
                 + 0.04 * diversity
             )
@@ -268,7 +528,6 @@ def select_diverse_candidates(
                 "family": mapping[option.removeprefix("member__")]["family"],
                 "selected_before": [x.removeprefix("member__") for x in selected],
                 "development": dev_metrics,
-                "benchmark": bench_metrics,
                 "residual_correlation": correlation,
                 "diversity": diversity,
                 "marginal_score": score,
@@ -288,7 +547,7 @@ def select_diverse_candidates(
     anomaly_families = {"statistical", "autoencoder", "hybrid"}
     selected_ids = [member.removeprefix("member__") for member in selected]
     if not any(mapping[item]["family"] in anomaly_families for item in selected_ids):
-        ranked = rank_forecast_results(results)
+        ranked = rank_development_results(results)
         anomaly_row = next(
             (row for row in ranked if row["family"] in anomaly_families), None
         )
@@ -344,6 +603,111 @@ def crossfit_aggregate(
     return output, full_plan
 
 
+def _write_recommendation_with_provenance(
+    root: Path,
+    recommendation: dict[str, Any],
+    results: list[dict[str, Any]],
+) -> None:
+    result_by_id = {
+        result["candidate"]["id"]: result
+        for result in results
+    }
+    member_bindings = []
+    for member in recommendation["members"]:
+        candidate_id = member["candidate"]["id"]
+        result = result_by_id[candidate_id]
+        result_manifest = result["artifact_manifest"]
+        raw_result_path = result.get("_result_path")
+        if not isinstance(raw_result_path, str):
+            raise RuntimeError(f"Result path is unavailable for member {candidate_id}")
+        result_path = Path(raw_result_path).resolve()
+        try:
+            relative_result_path = result_path.relative_to(root.resolve())
+        except ValueError as exc:
+            raise RuntimeError(
+                f"Member result must stay below the recommendation root: {raw_result_path}"
+            ) from exc
+        outputs = result_manifest.get("outputs")
+        required_oof = {
+            name: outputs.get(name) if isinstance(outputs, dict) else None
+            for name in ("development_oof.parquet", "benchmark_oof.parquet")
+        }
+        if any(value is None for value in required_oof.values()):
+            raise RuntimeError(f"Member {candidate_id} lacks authenticated OOF outputs")
+        member.update({
+            "source_result_path": relative_result_path.as_posix(),
+            "expected_result_fingerprint": result_manifest["fingerprint"],
+            "canonical_result_body_digest": result_manifest["result_body"],
+            "candidate_body_sha256": config_hash(member["candidate"]),
+            "development_summary_sha256": config_hash(result["development"]),
+            "benchmark_summary_sha256": config_hash(result["benchmark"]),
+            "oof_output_fingerprints": required_oof,
+        })
+        member_bindings.append({
+            "column": member["column"],
+            "candidate_id": candidate_id,
+            "candidate_body_sha256": config_hash(member["candidate"]),
+            "source_result_path": member["source_result_path"],
+            "expected_result_fingerprint": member["expected_result_fingerprint"],
+            "canonical_result_body_digest": member["canonical_result_body_digest"],
+            "development_summary_sha256": member["development_summary_sha256"],
+            "benchmark_summary_sha256": member["benchmark_summary_sha256"],
+            "oof_output_fingerprints": member["oof_output_fingerprints"],
+        })
+
+    plan = recommendation["winner"]["plan"]
+
+    recommendation["provenance_manifest"] = "recommendation.provenance.json"
+    recommendation_path = root / "recommendation.json"
+    write_json(recommendation_path, recommendation)
+    search_manifest_path = root / "manifest.json"
+    search_manifest = load_json(search_manifest_path)
+    provenance = {
+        "schema_version": RECOMMENDATION_MANIFEST_SCHEMA_VERSION,
+        "recommendation_file": file_fingerprint(recommendation_path),
+        "recommendation_body_sha256": config_hash(recommendation),
+        "search_manifest": {
+            "path": "manifest.json",
+            "file": file_fingerprint(search_manifest_path),
+            "input_fingerprint": search_manifest["artifact_fingerprint"],
+        },
+        "member_bindings": member_bindings,
+        "member_bindings_sha256": config_hash(member_bindings),
+        "winner_body_sha256": config_hash(recommendation["winner"]),
+        "winner_plan_sha256": config_hash(plan),
+        "artifact_requirements": [],
+    }
+    write_json(root / recommendation["provenance_manifest"], provenance)
+
+
+def _set_recommendation_execution_contract(
+    recommendation: dict[str, Any], root: Path
+) -> None:
+    method = recommendation["winner"]["plan"]["method"]
+    if method in {
+        "control",
+        "global_convex",
+        "horizon_convex",
+        "product_convex",
+        "aggregate_reconciled",
+    }:
+        recommendation.update({
+            "status": "verified_declarative",
+            "execution_enabled": True,
+            "final_submission_command": (
+                "caffeinate -dimsu uv run python ml/run_weekend_v2_final.py "
+                f"--recommendation {root / 'recommendation.json'} "
+                f"--output-dir {root / 'final'} --device mps --resume-members"
+            ),
+        })
+        return
+    recommendation.pop("final_submission_command", None)
+    recommendation.update({
+        "status": "archived_untrusted_artifact",
+        "execution_enabled": False,
+    })
+
+
 def ensemble_stage(
     root: Path,
     results: list[dict[str, Any]],
@@ -351,9 +715,6 @@ def ensemble_stage(
     seed: int,
 ) -> dict[str, Any]:
     development, members = merge_oof(results, "development")
-    benchmark, benchmark_members = merge_oof(results, "benchmark")
-    if members != benchmark_members:
-        raise RuntimeError("Development and benchmark member schemas differ")
     id_to_candidate = {result["candidate"]["id"]: result["candidate"] for result in results}
     control_result = next(result for result in results if result["candidate"]["family"] == "control")
     control_column = f"member__{control_result['candidate']['id']}"
@@ -389,11 +750,11 @@ def ensemble_stage(
             development, members, kind=kind, seed=seed + 3000 + offset,
             reference_column=control_column,
         )
-        model_path = root / "ensemble" / f"{kind}.pkl"
-        save_pickle(model_path, bundle)
+        relative_model_path = Path("ensemble") / f"{kind}.pkl"
+        save_pickle(root / relative_model_path, bundle)
         plans.append({
             "name": kind,
-            "plan": {"method": kind, "model_path": str(model_path)},
+            "plan": {"method": kind, "model_path": relative_model_path.as_posix()},
             "crossfit": crossfit,
             "bundle": bundle,
             "bundle_kind": kind,
@@ -412,13 +773,13 @@ def ensemble_stage(
                 max_alpha=max_alpha,
             )
             label = f"specialist_gate_{specialist_index:02d}_a{int(max_alpha * 100):02d}"
-            model_path = root / "ensemble" / f"{label}.pkl"
-            save_pickle(model_path, bundle)
+            relative_model_path = Path("ensemble") / f"{label}.pkl"
+            save_pickle(root / relative_model_path, bundle)
             plans.append({
                 "name": label,
                 "plan": {
                     "method": "specialist_gate",
-                    "model_path": str(model_path),
+                    "model_path": relative_model_path.as_posix(),
                     "control_column": control_column,
                     "specialist_column": specialist,
                 },
@@ -430,14 +791,7 @@ def ensemble_stage(
     rows = []
     for item in plans:
         crossfit = item["crossfit"]
-        if item.get("bundle_kind") == "specialist_gate":
-            benchmark_prediction = apply_specialist_gate(benchmark, item["bundle"])
-        elif "bundle" in item:
-            benchmark_prediction = apply_meta_model(benchmark, item["bundle"])
-        else:
-            benchmark_prediction = apply_weight_plan(benchmark, item["plan"], members)
         dev_metrics = evaluate_prediction(development, crossfit, control_column)
-        bench_metrics = evaluate_prediction(benchmark, benchmark_prediction, control_column)
         bootstrap = bootstrap_probability(
             development, crossfit, control_column, samples=5000, seed=seed
         )
@@ -450,7 +804,6 @@ def ensemble_stage(
             holiday_change = 0.0
         passes = {
             "development": dev_metrics["relative_improvement"] >= 0.002,
-            "benchmark": bench_metrics["relative_improvement"] >= -0.01,
             "top_decile": dev_metrics["top_decile_relative_change"] <= 0.02,
             "holiday_event": holiday_change <= 0.03,
             "bootstrap_probability": bootstrap["probability_improvement_positive"] >= 0.75,
@@ -459,14 +812,12 @@ def ensemble_stage(
             "name": item["name"],
             "plan": item["plan"],
             "development": dev_metrics,
-            "benchmark": bench_metrics,
             "bootstrap": bootstrap,
             "holiday_event_relative_change": holiday_change,
             "passes": passes,
             "accepted": all(passes.values()),
             "selection_score": (
                 dev_metrics["relative_improvement"]
-                + 0.35 * bench_metrics["relative_improvement"]
                 - 0.10 * max(dev_metrics["top_decile_relative_change"], 0.0)
                 - 0.10 * max(holiday_change, 0.0)
             ),
@@ -476,16 +827,10 @@ def ensemble_stage(
         development.assign(pred_weekend_v2=crossfit).to_parquet(
             root / "ensemble" / f"{item['name']}_development_oof.parquet", index=False
         )
-        benchmark.assign(pred_weekend_v2=benchmark_prediction).to_parquet(
-            root / "ensemble" / f"{item['name']}_benchmark_oof.parquet", index=False
-        )
 
-    accepted = sorted(
-        (row for row in rows if row["accepted"]),
-        key=lambda row: row["selection_score"], reverse=True,
-    )
-    if accepted:
-        winner = accepted[0]
+    selected_winner = select_development_winner(rows)
+    if selected_winner is not None:
+        winner = selected_winner
         promote = True
     else:
         winner = {
@@ -494,13 +839,31 @@ def ensemble_stage(
             "development": evaluate_prediction(
                 development, development[control_column].to_numpy(), control_column
             ),
-            "benchmark": evaluate_prediction(
-                benchmark, benchmark[control_column].to_numpy(), control_column
-            ),
             "accepted": True,
             "selection_score": 0.0,
         }
         promote = False
+
+    benchmark, benchmark_members = merge_oof(results, "benchmark")
+    if members != benchmark_members:
+        raise RuntimeError("Development and benchmark member schemas differ")
+    for item, row in zip(plans, rows, strict=True):
+        if item.get("bundle_kind") == "specialist_gate":
+            benchmark_prediction = apply_specialist_gate(benchmark, item["bundle"])
+        elif "bundle" in item:
+            benchmark_prediction = apply_meta_model(benchmark, item["bundle"])
+        else:
+            benchmark_prediction = apply_weight_plan(benchmark, item["plan"], members)
+        row["benchmark"] = evaluate_prediction(
+            benchmark, benchmark_prediction, control_column
+        )
+        benchmark.assign(pred_weekend_v2=benchmark_prediction).to_parquet(
+            root / "ensemble" / f"{item['name']}_benchmark_oof.parquet", index=False
+        )
+    if not promote:
+        winner["benchmark"] = evaluate_prediction(
+            benchmark, benchmark[control_column].to_numpy(), control_column
+        )
 
     member_payloads = []
     for member in members:
@@ -517,13 +880,12 @@ def ensemble_stage(
         "comparisons": rows,
         "winner": winner,
         "promote_weekend_v2": promote,
-        "final_submission_command": (
-            "caffeinate -dimsu uv run python ml/run_weekend_v2_final.py "
-            f"--recommendation {root / 'recommendation.json'} "
-            f"--output-dir {root / 'final'} --device mps --resume-members"
+        "selection_protocol": (
+            "cross_fitted_development_only; benchmark_is_frozen_reporting_only"
         ),
     }
-    write_json(root / "recommendation.json", recommendation)
+    _set_recommendation_execution_contract(recommendation, root)
+    _write_recommendation_with_provenance(root, recommendation, results)
     write_json(root / "winner_plan.json", winner)
     write_csv(root / "ensemble_leaderboard.csv", [
         {
@@ -571,7 +933,9 @@ def main() -> None:
     root.mkdir(parents=True, exist_ok=True)
     prior_root = Path(args.prior_root)
     profile = WEEKEND_V2_PROFILES[args.profile]
-    candidates = generate_weekend_v2_candidates(
+    train, _ = load_raw(Config())
+    target_role_validation = _profile_target_roles(train, profile)
+    candidates = generate_development_only_candidates(
         profile, seed=args.seed, prior_root=prior_root
     )
     write_json(root / "candidate_pool.json", candidates)
@@ -581,7 +945,26 @@ def main() -> None:
         "profile": profile.__dict__,
         "arguments": vars(args),
         "prior_root": str(prior_root),
+        "legacy_prior_evidence": {
+            "scientific_status": "contaminated",
+            "provenance_status": "unverified",
+            "selection_use": "excluded",
+        },
         "candidate_count": len(candidates),
+        "target_role_validation": target_role_validation,
+        "train_file_hash": file_hash("data/train_data.parquet"),
+        "environment": environment_metadata(requested_device=args.device),
+        "artifact_fingerprint": artifact_fingerprint(
+            schema_version=SCHEMA_VERSION,
+            semantic={
+                "profile": profile.__dict__,
+                "seed": args.seed,
+                "device": args.device,
+                "candidates": candidates,
+                "target_role_validation": target_role_validation,
+            },
+            source_paths=WEEKEND_SEARCH_SOURCE_PATHS,
+        ),
     })
     if args.dry_run:
         write_json(root / "dry_run_plan.json", {
@@ -596,11 +979,10 @@ def main() -> None:
         print(json.dumps(load_json(root / "dry_run_plan.json"), indent=2))
         return
 
-    train, _ = load_raw(Config())
     screen_results: list[dict[str, Any]] = []
     if args.stage in {"all", "screen"}:
         screen_results = run_stage(
-            root, "screen", candidates,
+            root, "screen", train, candidates,
             dev_origins=development_origins(profile.screen_development_origins),
             bench_origins=benchmark_origins(train, profile.screen_benchmark_origins, selected_forecasting_config()),
             epochs=profile.screen_epochs, seeds=profile.screen_seeds,
@@ -609,7 +991,23 @@ def main() -> None:
         if args.stage == "screen" or exhausted(started, args.max_hours):
             return
     else:
-        screen_results = load_stage_results(root / "screen")
+        screen_dev = development_origins(profile.screen_development_origins)
+        screen_bench = benchmark_origins(
+            train, profile.screen_benchmark_origins, selected_forecasting_config()
+        )
+        screen_results = _load_valid_stage_results(
+            root / "screen",
+            _stage_fingerprints(
+                train,
+                candidates,
+                dev_origins=screen_dev,
+                bench_origins=screen_bench,
+                epochs=profile.screen_epochs,
+                seeds=profile.screen_seeds,
+                device=args.device,
+            ),
+            confirm_recompute_stale=args.confirm_recompute_stale,
+        )
 
     if not screen_results:
         raise RuntimeError(
@@ -626,7 +1024,7 @@ def main() -> None:
     write_json(root / "refine_candidates.json", refine_candidates)
     if args.stage in {"all", "refine"}:
         refine_results = run_stage(
-            root, "refine", refine_candidates,
+            root, "refine", train, refine_candidates,
             dev_origins=development_origins(profile.refine_development_origins),
             bench_origins=benchmark_origins(train, profile.refine_benchmark_origins, selected_forecasting_config()),
             epochs=profile.refine_epochs, seeds=profile.refine_seeds,
@@ -635,7 +1033,23 @@ def main() -> None:
         if args.stage == "refine" or exhausted(started, args.max_hours):
             return
     else:
-        refine_results = load_stage_results(root / "refine")
+        refine_dev = development_origins(profile.refine_development_origins)
+        refine_bench = benchmark_origins(
+            train, profile.refine_benchmark_origins, selected_forecasting_config()
+        )
+        refine_results = _load_valid_stage_results(
+            root / "refine",
+            _stage_fingerprints(
+                train,
+                refine_candidates,
+                dev_origins=refine_dev,
+                bench_origins=refine_bench,
+                epochs=profile.refine_epochs,
+                seeds=profile.refine_seeds,
+                device=args.device,
+            ),
+            confirm_recompute_stale=args.confirm_recompute_stale,
+        )
 
     if not refine_results:
         raise RuntimeError(
@@ -652,7 +1066,7 @@ def main() -> None:
     write_json(root / "confirmation_candidates.json", confirmation_candidates)
     if args.stage in {"all", "confirmation"}:
         confirmation_results = run_stage(
-            root, "confirmation", confirmation_candidates,
+            root, "confirmation", train, confirmation_candidates,
             dev_origins=development_origins(profile.confirmation_development_origins),
             bench_origins=benchmark_origins(train, profile.confirmation_benchmark_origins, selected_forecasting_config()),
             epochs=profile.confirmation_epochs, seeds=profile.confirmation_seeds,
@@ -661,19 +1075,42 @@ def main() -> None:
         if args.stage == "confirmation" or exhausted(started, args.max_hours):
             return
     else:
-        confirmation_results = load_stage_results(root / "confirmation")
+        confirmation_dev = development_origins(
+            profile.confirmation_development_origins
+        )
+        confirmation_bench = benchmark_origins(
+            train,
+            profile.confirmation_benchmark_origins,
+            selected_forecasting_config(),
+        )
+        confirmation_results = _load_valid_stage_results(
+            root / "confirmation",
+            _stage_fingerprints(
+                train,
+                confirmation_candidates,
+                dev_origins=confirmation_dev,
+                bench_origins=confirmation_bench,
+                epochs=profile.confirmation_epochs,
+                seeds=profile.confirmation_seeds,
+                device=args.device,
+            ),
+            confirm_recompute_stale=args.confirm_recompute_stale,
+        )
 
     if not confirmation_results:
         raise RuntimeError(
             "No completed confirmation results are available. Run --stage confirmation first or use --stage all."
         )
     recommendation = ensemble_stage(root, confirmation_results, profile, args.seed)
-    print(json.dumps({
+    summary = {
         "winner": recommendation["winner"]["name"],
         "promote_weekend_v2": recommendation["promote_weekend_v2"],
         "report": str(root / "FINAL_REPORT.md"),
-        "final_command": recommendation["final_submission_command"],
-    }, indent=2))
+        "execution_enabled": recommendation["execution_enabled"],
+    }
+    if recommendation["execution_enabled"]:
+        summary["final_command"] = recommendation["final_submission_command"]
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":
