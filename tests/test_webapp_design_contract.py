@@ -1,4 +1,7 @@
+import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,6 +13,13 @@ ROOT = Path(__file__).resolve().parents[1]
 AUTHORED = ROOT / "webapp" / "static"
 GENERATED = ROOT / "docs"
 PAGES = ("index.html", "dataset.html", "evaluation.html", "model.html")
+CHROME_CANDIDATES = (
+    "google-chrome",
+    "chromium",
+    "chromium-browser",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+)
 
 EXPECTED_PROMO = (
     '<div class="promo-bar"> '
@@ -165,6 +175,116 @@ EXPECTED_RULES = {
 }
 
 
+def _chrome_binary() -> str | None:
+    for candidate in CHROME_CANDIDATES:
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+        if Path(candidate).is_file():
+            return candidate
+    return None
+
+
+def _render_promo_geometry(
+    tmp_path: Path,
+    chrome: str,
+    viewport_width: int,
+) -> dict:
+    shutil.copy2(AUTHORED / "styles.css", tmp_path / "styles.css")
+    frame = tmp_path / f"promo-frame-{viewport_width}.html"
+    frame.write_text(
+        f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="promo-bar">
+    <a>30 Product Time Series</a>
+    <span>Anomaly Diagnostics</span>
+    <span>Control Retained</span>
+    <a>Walk-Forward Validated</a>
+  </div>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+    probe = tmp_path / f"promo-probe-{viewport_width}.html"
+    probe.write_text(
+        f"""<!DOCTYPE html>
+<html>
+<body>
+  <pre id="result"></pre>
+  <script>
+    async function measure(frame) {{
+      const view = frame.contentWindow;
+      await Promise.race([
+        view.document.fonts.ready,
+        new Promise((resolve) => setTimeout(resolve, 1000)),
+      ]);
+      const bar = view.document.querySelector(".promo-bar");
+      const children = [...bar.children];
+      const textRects = children.map((child) => {{
+        const range = view.document.createRange();
+        range.selectNodeContents(child);
+        const rect = range.getBoundingClientRect();
+        return {{ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }};
+      }});
+      const overlaps = [];
+      for (let left = 0; left < textRects.length; left += 1) {{
+        for (let right = left + 1; right < textRects.length; right += 1) {{
+          const a = textRects[left];
+          const b = textRects[right];
+          const sameRow = a.top < b.bottom && b.top < a.bottom;
+          const intersects = a.left < b.right && b.left < a.right;
+          if (sameRow && intersects) overlaps.push([left + 1, right + 1]);
+        }}
+      }}
+      const style = view.getComputedStyle(bar);
+      document.getElementById("result").textContent = JSON.stringify({{
+        viewportWidth: view.innerWidth,
+        columns: style.gridTemplateColumns.split(" ").length,
+        minHeight: style.minHeight,
+        rowGap: style.rowGap,
+        alignments: children.map((child) => view.getComputedStyle(child).textAlign),
+        overlaps,
+      }});
+    }}
+  </script>
+  <iframe src="{frame.name}" onload="measure(this)"
+          style="width:{viewport_width}px;height:180px;border:0"></iframe>
+</body>
+</html>
+""",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [
+            chrome,
+            "--headless=new",
+            "--disable-gpu",
+            "--hide-scrollbars",
+            "--no-sandbox",
+            "--allow-file-access-from-files",
+            "--force-device-scale-factor=1",
+            "--window-size=900,300",
+            "--virtual-time-budget=3000",
+            "--dump-dom",
+            probe.as_uri(),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    match = re.search(r'<pre id="result">(\{.*?\})</pre>', completed.stdout)
+    assert match, completed.stdout
+    return json.loads(match.group(1))
+
+
 @pytest.mark.parametrize("directory", (AUTHORED, GENERATED), ids=("authored", "generated"))
 def test_every_page_uses_canonical_prediction_promo(directory: Path) -> None:
     dataset_href, evaluation_href = (
@@ -248,6 +368,35 @@ def test_desktop_promo_tracks_do_not_overlap_above_responsive_breakpoint() -> No
     css = (AUTHORED / "styles.css").read_text(encoding="utf-8")
     assert "@media (max-width: 800px) {\n  .promo-bar {" in css
     assert "@media (max-width: 700px) {\n  .promo-bar {" not in css
+
+
+def test_anomaly_promo_has_safe_computed_geometry_at_boundaries(tmp_path: Path) -> None:
+    chrome = _chrome_binary()
+    if not chrome:
+        pytest.skip("Chrome/Chromium is required for rendered promo geometry")
+
+    at_800 = _render_promo_geometry(tmp_path, chrome, 800)
+    assert at_800 == {
+        "viewportWidth": 800,
+        "columns": 2,
+        "minHeight": "57px",
+        "rowGap": "8px",
+        "alignments": ["left", "right", "left", "right"],
+        "overlaps": [],
+    }
+
+    at_801 = _render_promo_geometry(tmp_path, chrome, 801)
+    assert at_801["viewportWidth"] == 801
+    assert at_801["columns"] == 4
+    assert at_801["minHeight"] == "40px"
+    assert at_801["alignments"] == ["left", "center", "center", "right"]
+    assert at_801["overlaps"] == []
+
+    at_480 = _render_promo_geometry(tmp_path, chrome, 480)
+    assert at_480["columns"] == 1
+    assert at_480["minHeight"] == "89px"
+    assert at_480["alignments"] == ["left", "left", "left", "left"]
+    assert at_480["overlaps"] == []
 
 
 @pytest.mark.parametrize("directory", (AUTHORED, GENERATED), ids=("authored", "generated"))
