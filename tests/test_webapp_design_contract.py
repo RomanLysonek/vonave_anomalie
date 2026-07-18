@@ -11,6 +11,17 @@ AUTHORED = ROOT / "webapp" / "static"
 GENERATED = ROOT / "docs"
 PAGES = ("index.html", "dataset.html", "evaluation.html", "model.html")
 
+EXPECTED_PROMO = (
+    '<div class="promo-bar"> '
+    '<a class="promo-dataset-link" data-dataset-link href="{dataset_href}" '
+    'title="The data structure and the modeling decisions it forced">'
+    '30 Product Time Series</a> '
+    '<span id="promo-strategy">Anomaly Diagnostics</span> '
+    '<span id="promo-model-count">Control Retained</span> '
+    '<a class="promo-evaluation-link" data-evaluation-link href="{evaluation_href}" '
+    'title="Rolling forecast origins; not the same thing as recursive inference">'
+    'Walk-Forward Validated</a> </div>'
+)
 EXPECTED_HEADER = (
     '<header class="hero"> <div class="hero-top"> <div class="brand"> '
     '<span class="brand-logo">NOTINO</span> '
@@ -20,6 +31,50 @@ EXPECTED_HEADER = (
     '<nav class="site-nav" id="site-nav" '
     'aria-label="Anomaly dashboard sections"></nav> </header>'
 )
+
+PROMO_DESKTOP_CSS = """\
+.promo-bar {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px var(--page-padding-inline);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: center;
+  column-gap: 24px;
+  background: #fff;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}"""
+PROMO_CHILD_CSS = """\
+.promo-bar > * {
+  min-width: 0;
+  white-space: nowrap;
+}"""
+PROMO_TABLET_CSS = """\
+@media (max-width: 700px) {
+  .promo-bar {
+    min-height: 57px;
+    padding: 8px 24px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 24px;
+    row-gap: 8px;
+  }"""
+PROMO_MOBILE_CSS = """\
+@media (max-width: 480px) {
+  .promo-bar {
+    min-height: 89px;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 8px;
+  }"""
 
 EXPECTED_RULES = {
     "header.hero": {
@@ -106,6 +161,40 @@ EXPECTED_RULES = {
 
 
 @pytest.mark.parametrize("directory", (AUTHORED, GENERATED), ids=("authored", "generated"))
+def test_every_page_uses_canonical_prediction_promo(directory: Path) -> None:
+    dataset_href, evaluation_href = (
+        ("/dataset", "/evaluation")
+        if directory == AUTHORED
+        else ("./dataset.html", "./evaluation.html")
+    )
+    expected = EXPECTED_PROMO.format(
+        dataset_href=dataset_href,
+        evaluation_href=evaluation_href,
+    )
+    for page in PAGES:
+        html = (directory / page).read_text(encoding="utf-8")
+        promos = re.findall(r'<div class="promo-bar">.*?</div>', html, re.DOTALL)
+        assert len(promos) == 1, f"{directory.name}/{page}"
+        assert re.sub(r"\s+", " ", promos[0]).strip() == expected
+        assert "research-ribbon" not in html
+
+
+@pytest.mark.parametrize("directory", (AUTHORED, GENERATED), ids=("authored", "generated"))
+def test_promo_geometry_matches_prediction_template(directory: Path) -> None:
+    css = (directory / "styles.css").read_text(encoding="utf-8")
+    for contract in (
+        PROMO_DESKTOP_CSS,
+        PROMO_CHILD_CSS,
+        PROMO_TABLET_CSS,
+        PROMO_MOBILE_CSS,
+    ):
+        assert contract in css
+    assert "width: 60%;" not in css
+    assert "font-size: clamp(8.5px, 0.72vw, 10.5px);" not in css
+    assert "research-ribbon" not in css
+
+
+@pytest.mark.parametrize("directory", (AUTHORED, GENERATED), ids=("authored", "generated"))
 def test_every_page_uses_prediction_header_structure(directory: Path) -> None:
     for page in PAGES:
         html = (directory / page).read_text(encoding="utf-8")
@@ -156,6 +245,8 @@ def test_navigation_inventory_and_page_accents_match_contract() -> None:
         assert f'label: "{label}", color: "{color}"' in common
     assert common.count("label: ") == len(expected)
     assert "Data & transfer" not in common
+    assert 'getElementById("promo-strategy")' not in common
+    assert 'getElementById("promo-model-count")' not in common
 
     dataset = (AUTHORED / "dataset.html").read_text(encoding="utf-8")
     evaluation = (AUTHORED / "evaluation.html").read_text(encoding="utf-8")

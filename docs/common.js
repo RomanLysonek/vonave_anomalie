@@ -185,9 +185,6 @@ function configureStrategySelect(data, select, onChange, modelKey = null) {
 }
 
 function updateStrategyCopy(data, strategy) {
-  const promo = document.getElementById("promo-strategy");
-  if (promo) promo.textContent = `${data.config?.horizon || 7}-Day ${strategyLabel(strategy)} Forecast`;
-
   const canonical = `${canonicalModel(data)} / ${strategyLabel(canonicalStrategy(data))}`;
   const canonicalText = document.getElementById("canonical-selection-text");
   if (canonicalText) canonicalText.textContent = `Canonical submission: ${canonical}`;
@@ -196,8 +193,6 @@ function updateStrategyCopy(data, strategy) {
   if (footer) {
     footer.textContent = `Canonical submission: ${canonical}. The dashboard can compare every available strategy without changing the submitted forecast.`;
   }
-  const modelCount = document.getElementById("promo-model-count");
-  if (modelCount) modelCount.textContent = "Research Models Compared";
 }
 
 function renderNav(_data, activeSlug) {

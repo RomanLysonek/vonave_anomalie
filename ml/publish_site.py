@@ -209,6 +209,8 @@ def _remove_known_tree(path: Path) -> None:
 
 def _static_html(source: str) -> str:
     result = source.replace('href="/static/', 'href="./').replace('src="/static/', 'src="./')
+    result = result.replace('href="/dataset"', 'href="./dataset.html"')
+    result = result.replace('href="/evaluation"', 'href="./evaluation.html"')
     marker = '<script src="./common.js'
     if marker in result and "window.STATIC_DASHBOARD" not in result:
         result = result.replace(
