@@ -121,10 +121,12 @@ def control_page() -> FileResponse:
 
 @app.get("/model/{slug}")
 def model_page(slug: str) -> FileResponse:
-    # One shared template; model.js reads `slug` from the URL itself and
-    # renders that model's data/colors. Unknown slugs still get the page --
-    # model.js shows a clear "not found" state rather than a 404.
-    return FileResponse(STATIC_DIR / "model.html")
+    if slug != "neuralnet":
+        raise HTTPException(
+            status_code=404,
+            detail="Only the NeuralNet control is exposed in the anomaly research app.",
+        )
+    return control_page()
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

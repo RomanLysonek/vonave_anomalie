@@ -5,7 +5,7 @@ from pathlib import Path
 import socket
 import subprocess
 import time
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 import pytest
@@ -23,9 +23,17 @@ SMOKE_PATHS = (
     "/dataset",
     "/evaluation",
     "/control",
+    "/model/neuralnet",
     "/api/results",
     "/api/anomaly-lab",
     "/api/anomaly-lab/product/1",
+)
+BLOCKED_MODEL_PATHS = (
+    "/model/xgboost",
+    "/model/lightgbm",
+    "/model/ensemble",
+    "/model/seasonalnaive",
+    "/model/movingavg28",
 )
 
 
@@ -67,6 +75,10 @@ def test_documented_launch_commands_and_http_surface(command: tuple[str, ...]) -
         for path in SMOKE_PATHS:
             with urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as response:
                 assert response.status == 200, path
+        for path in BLOCKED_MODEL_PATHS:
+            with pytest.raises(HTTPError) as exc_info:
+                urlopen(f"http://127.0.0.1:{port}{path}", timeout=5)
+            assert exc_info.value.code == 404, path
         with urlopen(f"http://127.0.0.1:{port}/", timeout=5) as response:
             assert b"DAVID / DBAAS knowledge transfer" in response.read()
     finally:

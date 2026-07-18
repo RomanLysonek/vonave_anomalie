@@ -43,6 +43,7 @@ function checkIndependentNavigation() {
   assert.ok(nav.innerHTML.includes('href="dataset.html"'));
   assert.ok(nav.innerHTML.includes('href="evaluation.html"'));
   assert.ok(nav.innerHTML.includes('href="model.html"'));
+  assert.ok(!source("common.js").includes("model.html?model="));
   assert.ok(!nav.innerHTML.includes("Classical" + " Forecasting"));
   assert.ok(!nav.innerHTML.includes("Chronos-2" + " Challenger"));
   assert.ok(nav.innerHTML.includes("nav-pill active"));
@@ -63,7 +64,27 @@ function checkStaticAnomalyContract() {
   assert.ok(!html.includes('id="strategy-select"'));
 }
 
+function checkStaticControlIsFixed() {
+  const context = {
+    window: {
+      location: {
+        pathname: "/model/xgboost",
+        search: "?model=lightgbm",
+      },
+    },
+  };
+  vm.createContext(context);
+  const modelSource = source("model.js");
+  vm.runInContext(modelSource.slice(0, modelSource.indexOf("const KIND_LABEL")), context);
+
+  assert.strictEqual(context.currentSlug(), "neuralnet");
+  assert.ok(!modelSource.includes("URLSearchParams"));
+  assert.ok(!modelSource.includes("renderNotFound"));
+  assert.ok(!modelSource.includes("modelHref("));
+}
+
 checkSyntax();
 checkIndependentNavigation();
 checkStaticAnomalyContract();
-console.log("3 JavaScript smoke checks passed");
+checkStaticControlIsFixed();
+console.log("4 JavaScript smoke checks passed");

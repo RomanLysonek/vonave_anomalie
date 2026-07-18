@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "webapp" / "static"
@@ -84,7 +87,27 @@ def test_server_routes_point_to_anomaly_first_pages() -> None:
     assert Path(server.dataset_page().path) == STATIC / "dataset.html"
     assert Path(server.evaluation_page().path) == STATIC / "evaluation.html"
     assert Path(server.control_page().path) == STATIC / "model.html"
+    assert Path(server.model_page("neuralnet").path) == STATIC / "model.html"
     assert Path(server.favicon().path) == STATIC / "favicon.svg"
+
+    for slug in ("xgboost", "lightgbm", "ensemble", "seasonalnaive", "movingavg28"):
+        with pytest.raises(HTTPException) as exc_info:
+            server.model_page(slug)
+        assert exc_info.value.status_code == 404
+
+
+def test_static_control_ignores_model_query_and_has_no_model_directory() -> None:
+    model_script = (STATIC / "model.js").read_text(encoding="utf-8")
+    common_script = (STATIC / "common.js").read_text(encoding="utf-8")
+
+    assert 'function currentSlug() {\n  return "neuralnet";\n}' in model_script
+    assert "URLSearchParams" not in model_script
+    assert "renderNotFound" not in model_script
+    assert "modelHref(" not in model_script
+    assert 'href: controlHref()' in common_script
+    assert "model.html?model=" not in common_script
+    assert 'return slug === "neuralnet" ? controlHref() : "#";' in common_script
+    assert "data.models || []" not in common_script.split("function renderNav", 1)[1]
 
 
 def test_static_and_api_anomaly_artifacts_are_identical() -> None:

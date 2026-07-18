@@ -21,9 +21,7 @@ function overviewHref() {
 }
 
 function modelHref(slug) {
-  return window.STATIC_DASHBOARD
-    ? `model.html?model=${encodeURIComponent(slug)}`
-    : `/model/${slug}`;
+  return slug === "neuralnet" ? controlHref() : "#";
 }
 
 function datasetHref() {

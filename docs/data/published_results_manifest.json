@@ -220,7 +220,7 @@
     ".nojekyll": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "anomalies.js": "7585ffdff855115629c06af98462e9f11580493ec8434f791bf9482e92022c19",
     "app.js": "fb056233eb3071e08ccbe046e5897451b2542cd557fbf7acc54ead98a8981e82",
-    "common.js": "6c98c75111ed80df87a8787df448898e875e3b1db66bd2e1fa3311a5456065ae",
+    "common.js": "d8b24524796fe907caa7f41f18d4e14bae7a77542a07a3e32ac77a49a08360b3",
     "data/anomaly-dashboard-v2.json": "42eddac0875eb37eb317a4de6c2d12f8d671e30c3ba462cdebd24c8568c5ba75",
     "data/anomaly-products-v2/product-1.json": "be5cb7d52d4c61b401dc944d4b514e1eb424e05f51b4fc8da91d570eabca9819",
     "data/anomaly-products-v2/product-10.json": "a7f261f8da3486373b0217c6a0ea2fa8ce5389664b787d1767f2b33397426814",
@@ -260,7 +260,7 @@
     "favicon.svg": "91ad1623124a06a028beb2b77b32645c4754fec7580697780d0c2e606d9b07ea",
     "index.html": "c28d02f5ddd4a2a1b037a586f7a859ac841fb222edfde4a7d84e4a5a78e6d485",
     "model.html": "35b03e13f214997c19c5b3e7399f3438e598046c1fbf1c0a844fed1248bce7c5",
-    "model.js": "a48cf74169fa477fd732a128bb6cf9662b4958000990bcf719514431f6535de3",
+    "model.js": "580f9874920f376a636682c50531bd6a175fc78371cb1ec27e8e1099b244675a",
     "styles.css": "d89eed7cd1a27f10879d148e7f7ef94bacf5ed2f7fd66014b8a240b7d330a800"
   },
   "snapshot_as_of": "2026-01-18",

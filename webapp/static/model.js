@@ -1,9 +1,5 @@
 function currentSlug() {
-  const query = new URLSearchParams(window.location.search).get("model");
-  if (query) return query;
-  const parts = window.location.pathname.split("/").filter(Boolean);
-  const current = parts[parts.length - 1] || "";
-  return current === "control" || current === "model.html" ? "neuralnet" : current;
+  return "neuralnet";
 }
 
 const KIND_LABEL = { primary: "Submission", ensemble: "OOF Ensemble", baseline: "Baseline", naive: "Naive" };
@@ -423,22 +419,12 @@ function populateProductSelector(data) {
   return ids[0];
 }
 
-function renderNotFound(data, slug) {
-  document.getElementById("app").innerHTML = `
-    <div class="panel">
-      <div class="panel-header"><h2>Unknown model "${slug}"</h2></div>
-      <p style="color:var(--text-dim)">Try one of: ${(data.models || []).map((model) => `<a href="${modelHref(model.slug)}" style="color:${model.color}">${model.label}</a>`).join(", ")}</p>
-    </div>`;
-  document.getElementById("model-hero").style.display = "none";
-}
-
 async function main() {
   try {
     const data = await loadResults();
-    const model = modelByKey(data, currentSlug());
+    const model = modelByKey(data, "NeuralNet");
     if (!model) {
-      renderNotFound(data, currentSlug());
-      return;
+      throw new Error("The published NeuralNet control is unavailable.");
     }
 
     const productSelect = document.getElementById("product-select");
@@ -466,7 +452,7 @@ async function main() {
       renderProductChart(data, model, productSelect.value || firstProduct, strategy);
     });
 
-    renderNav(data, currentSlug());
+    renderNav(data, "control");
     renderHero(model);
     refresh();
     document.getElementById("footer-note").innerHTML =
